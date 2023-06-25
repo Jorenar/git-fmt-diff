@@ -1,0 +1,110 @@
+#!/usr/bin/env sh
+
+make_diffprg () {
+    diffprg="$(mktemp)"
+    echo '
+    #!/usr/bin/env sh
+
+    diff -d "$@"
+    ' > "$diffprg"
+    chmod +x $diffprg
+    echo "$diffprg"
+}
+
+compare () {
+    diffprg="$1"
+    shift 1
+    diff3 -x --diff-program="$diffprg" "$1" "$2" "$3" 2> /dev/null
+}
+
+git_get_filenames () {
+    git diff --diff-filter=ARMC --name-status "$1" "$2" | cut -f2-
+}
+
+get_filetype_vim () {
+    VIMINIT='' vim \
+        --clean -u DEFAULTS -U NONE -i NONE \
+        --not-a-term -esc \
+        +'sil! echo "no idea why this echo is needed' \
+        +'sil! exec "!echo ".&ft' \
+        +quit \
+        "$1" 2> /dev/null
+}
+
+get_formatter () {
+    ft="$(get_filetype_vim "$1")"
+    [ -z "$ft" ] && return
+    awk "/^$ft:/ "'{ $1=""; print substr($0,2) }' .stylerc
+}
+
+git_retrieve () {
+    obj="$1"
+    file="$2"
+    out="$3"
+
+    git show "$obj":"$file" 2> /dev/null > "$out"
+    ret="$?"
+    [ "$ret" != 0 ] && echo > "$out"
+    return "$ret"
+}
+
+process_file () {
+    obj1="$1"
+    obj2="$2"
+    line="$3"
+    diffprg="$4"
+
+    old_name="$(echo "$line" | cut -f1)"
+    cur_name="$(echo "$line" | cut -f2)"
+    [ -z "$cur_name" ] && cur_name="$old_name"
+
+    formatter="$(get_formatter "$cur_name")"
+
+    if [ -z "$formatter" ]; then
+        return
+    fi
+
+    tempdir="$(mktemp -d)"
+
+    old="$tempdir"/old
+    cur="$tempdir"/cur
+    new="$tempdir"/new
+
+    git_retrieve "$obj2" "$cur_name" "$cur"
+    git_retrieve "$obj1" "$old_name" "$old"
+
+    eval $formatter "$cur" > "$new" 2> /dev/null
+
+    if diff -s "$cur" "$new" > /dev/null; then
+        return
+    fi
+
+    out="$(compare "$diffprg" "$old" "$cur" "$new")"
+
+    if [ -n "$out" ]; then
+        echo "$cur_name"
+        echo "$out"
+    fi
+
+    rm "$old" "$cur" "$new"
+    rmdir "$tempdir"
+}
+
+main () {
+    obj1="$1"
+    obj2="$2"
+
+    if [ -z "$obj1" ] || [ -z "$obj2" ]; then
+        return 1
+    fi
+
+    diffprg="$(make_diffprg)"
+
+    git_get_filenames "$obj1" "$obj2" | while read -r line; do
+        process_file "$obj1" "$obj2" "$line" "$diffprg"
+    done
+
+    rm "$diffprg"
+}
+
+main "$@"
