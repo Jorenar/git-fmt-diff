@@ -38,6 +38,15 @@ get_filetype_vim () {
 get_formatter () {
     ft="$(get_filetype_vim "$1")"
     [ -z "$ft" ] && return
+
+    if [ -e ".gitconfig" ]; then
+        fmtprg="$(git config --file=.gitconfig --get stylecheck."$ft")"
+        if [ -n "$fmtprg" ]; then
+            echo "$fmtprg"
+            return
+        fi
+    fi
+
     git config --get stylecheck."$ft"
 }
 
