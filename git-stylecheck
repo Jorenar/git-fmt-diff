@@ -7,7 +7,7 @@ make_diffprg () {
 
     diff -d "$@"
     ' > "$diffprg"
-    chmod +x $diffprg
+    chmod +x "$diffprg"
     echo "$diffprg"
 }
 
