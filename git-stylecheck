@@ -99,7 +99,7 @@ process_file () {
         return
     fi
 
-    out="$(compare "$diffprg" "$old" "$cur" "$new")"
+    out="$(compare "$diffprg" "$cur" "$old" "$new")"
 
     if [ -n "$out" ]; then
         sgr 1
