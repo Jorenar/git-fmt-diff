@@ -1,5 +1,16 @@
 #!/usr/bin/env sh
 
+_vim () {
+    file="$1"
+    shift 1
+    VIMINIT='' command vim \
+        --clean -u DEFAULTS -U NONE -i NONE \
+        --not-a-term -esc \
+        "$@" \
+        +quit \
+        "$file" 2> /dev/null
+}
+
 sgr () {
     printf "\033[%sm" "$1"
 }
@@ -26,13 +37,9 @@ git_get_filenames () {
 }
 
 get_filetype_vim () {
-    VIMINIT='' vim \
-        --clean -u DEFAULTS -U NONE -i NONE \
-        --not-a-term -esc \
+    _vim "$1" \
         +'sil! echo "no idea why this echo is needed' \
-        +'sil! exec "!echo ".&ft' \
-        +quit \
-        "$1" 2> /dev/null
+        +'sil! exec "!echo ".&ft'
 }
 
 get_formatter () {
