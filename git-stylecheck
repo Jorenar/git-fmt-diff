@@ -12,10 +12,10 @@ _vim () {
 }
 
 sgr () {
-    printf "\033[%sm" "$1"
+    printf "\033[%sm%s\033[0m" "$1" "$2"
 }
 
-make_diffprg () {
+gen_diffprg () {
     diffprg="$(mktemp)"
     echo '
     #!/usr/bin/env sh
@@ -26,7 +26,7 @@ make_diffprg () {
     echo "$diffprg"
 }
 
-compare () {
+diff3_get_ed_patch () {
     diffprg="$1"
     shift 1
     diff3 -x --diff-program="$diffprg" "$1" "$2" "$3" 2> /dev/null
@@ -42,7 +42,7 @@ get_filetype_vim () {
         +'sil! exec "!echo ".&ft'
 }
 
-get_formatter () {
+git_get_formatter () {
     ft="$(get_filetype_vim "$1")"
     [ -z "$ft" ] && return
 
@@ -68,6 +68,24 @@ git_retrieve () {
     return "$ret"
 }
 
+vim_apply_patch () {
+    in="$1"
+    out="$2"
+    patch="$3"
+    _vim "$in" \
+        -e \
+        -S "$patch" \
+        +"write! $out"
+}
+
+git_display_diff () {
+    git diff --color "$cur" "$new" | sed '
+        /diff /,/@@/ {
+            H;/@@/!d;z;x
+            s|.*\n.*--- a/[^\n]*.*+++ b/[^\n]*|==> '"$(sgr 1 "$cur_name")"'|
+        }'
+}
+
 process_file () {
     obj1="$1"
     obj2="$2"
@@ -78,7 +96,7 @@ process_file () {
     cur_name="$(echo "$line" | cut -f2)"
     [ -z "$cur_name" ] && cur_name="$old_name"
 
-    formatter="$(get_formatter "$cur_name")"
+    formatter="$(git_get_formatter "$cur_name")"
 
     if [ -z "$formatter" ]; then
         return
@@ -89,6 +107,7 @@ process_file () {
     old="$tempdir"/old
     cur="$tempdir"/cur
     new="$tempdir"/new
+    patch="$tempdir"/patch
 
     git_retrieve "$obj2" "$cur_name" "$cur"
     git_retrieve "$obj1" "$old_name" "$old"
@@ -99,16 +118,14 @@ process_file () {
         return
     fi
 
-    out="$(compare "$diffprg" "$cur" "$old" "$new")"
+    diff3_get_ed_patch "$diffprg" "$cur" "$old" "$new" > "$patch"
 
-    if [ -n "$out" ]; then
-        sgr 1
-        echo "--- $cur_name"
-        sgr 0
-        echo "$out"
+    if [ -s "$patch" ]; then
+        vim_apply_patch "$cur" "$new" "$patch"
+        display_diff "$cur" "$new"
     fi
 
-    rm "$old" "$cur" "$new"
+    rm "$old" "$cur" "$new" "$patch"
     rmdir "$tempdir"
 }
 
@@ -120,7 +137,7 @@ main () {
         return 1
     fi
 
-    diffprg="$(make_diffprg)"
+    diffprg="$(gen_diffprg)"
 
     git_get_filenames "$obj1" "$obj2" | while read -r line; do
         process_file "$obj1" "$obj2" "$line" "$diffprg"
