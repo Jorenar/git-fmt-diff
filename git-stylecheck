@@ -38,7 +38,7 @@ get_filetype_vim () {
 get_formatter () {
     ft="$(get_filetype_vim "$1")"
     [ -z "$ft" ] && return
-    awk "/^$ft:/ "'{ $1=""; print substr($0,2) }' .stylerc
+    git config --get stylecheck."$ft"
 }
 
 git_retrieve () {
