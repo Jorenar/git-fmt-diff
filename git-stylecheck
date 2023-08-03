@@ -71,17 +71,17 @@ vim_apply_patch () {
     out="$2"
     patch="$3"
     vim -u NONE -es \
-        -S "$patch" +"saveas! $out" +"quit!" \
+        -S "$patch" \
+        +"w! $out" \
+        +"quit!" \
         "$in"
 }
 
 git_display_diff () {
-    filename="$(sgr 1 "$3")"
-    git diff --color "$1" "$2" | sed '
-        /diff /,/@@/ {
-            H;/@@/!d;z;x
-            s|.*\n.*--- a/[^\n]*.*+++ b/[^\n]*|==> '"$filename"'|
-        }'
+    [ -t 1 ] && git_color_opt="--color" || git_color_opt=
+    git diff $git_color_opt "$1" "$2" | sed \
+        -e "s|a$1|a/$3|" \
+        -e "s|b$2|b/$3|"
 }
 
 process_file () {
@@ -128,7 +128,7 @@ process_file () {
 }
 
 main () {
-    obj1="${1:-HEAD~1}"
+    obj1="${1:-HEAD}"
     obj2="$2"
 
     diffprg="$(gen_diffprg)"
