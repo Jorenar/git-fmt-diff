@@ -36,22 +36,27 @@ vim_get_filetype () (
         "$1"
 )
 
-git_get_formatter () (
-    ft="$(vim_get_filetype "$1")"
-    [ -z "$ft" ] && return
+git_get_conf () (
+    var="$1"
 
     if [ -e ".gitconfig" ]; then
-        fmtprg="$(git config --file=.gitconfig --get stylecheck."$ft")"
+        fmtprg="$(git config --file=.gitconfig --get "$var")"
         if [ -n "$fmtprg" ]; then
             echo "$fmtprg"
             return
         fi
     fi
 
-    git config --get stylecheck."$ft"
+    git config --get "$var"
 )
 
-git_retrieve () (
+git_get_formatter () (
+    ft="$(vim_get_filetype "$1")"
+    [ -z "$ft" ] && return
+    git_get_conf stylecheck."$ft"
+)
+
+git_retrieve_file () (
     obj="$1"
     file="$2"
     out="$3"
@@ -77,11 +82,35 @@ vim_apply_patch () (
         "$in"
 )
 
-git_display_diff () (
-    [ -t 1 ] && git_color_opt="--color" || git_color_opt=
-    git diff $git_color_opt "$1" "$2" | sed \
-        -e "s|a$1|a/$3|" \
-        -e "s|b$2|b/$3|"
+git_get_diffs () (
+    color="$1"
+    cur="$2"
+    new="$3"
+    filename="$4"
+
+    # shellcheck disable=SC2086
+    git diff $color "$cur" "$new" | \
+        sed -e "s,a$cur,a/$filename," -e "s,b$new,b/$cur_name," # TODO: dynamic sep
+)
+
+git_get_pager () (
+    if [ -t 1 ]; then
+        echo "cat"
+        return
+    fi
+
+    pgr="$(git_get_conf pager.stylecheck)"
+    if [ -z "$pgr" ]; then
+        pgr="$(git_get_conf pager.diff)"
+        if [ -z "$pgr" ]; then
+            pgr="$(git env GIT_PAGER)"
+            if [ -z "$pgr" ]; then
+                pgr="less"
+            fi
+        fi
+    fi
+
+    echo "$pgr"
 )
 
 process_file () (
@@ -89,6 +118,7 @@ process_file () (
     obj2="$2"
     line="$3"
     diffprg="$4"
+    diff_file="$5"
 
     old_name="$(echo "$line" | cut -f1)"
     cur_name="$(echo "$line" | cut -f2)"
@@ -107,8 +137,8 @@ process_file () (
     new="$tempdir"/new
     patch="$tempdir"/patch
 
-    git_retrieve "$obj2" "$cur_name" "$cur"
-    git_retrieve "$obj1" "$old_name" "$old"
+    git_retrieve_file "$obj2" "$cur_name" "$cur"
+    git_retrieve_file "$obj1" "$old_name" "$old"
 
     eval "$formatter" "$cur" > "$new" 2> /dev/null
 
@@ -120,7 +150,8 @@ process_file () (
 
     if [ -s "$patch" ]; then
         vim_apply_patch "$cur" "$new" "$patch"
-        git_display_diff "$cur" "$new" "$cur_name"
+        [ -t 1 ] && git_color_opt="--color" || git_color_opt=
+        git_get_diffs "$git_color_opt" "$cur" "$new" "$cur_name" >> "$diff_file"
     fi
 
     rm "$old" "$cur" "$new" "$patch"
@@ -132,12 +163,15 @@ main () (
     obj2="$2"
 
     diffprg="$(gen_diffprg)"
+    diff_file="$(mktemp)"
 
     git_get_filenames "$obj1" "$obj2" | while read -r line; do
-        process_file "$obj1" "$obj2" "$line" "$diffprg"
+        process_file "$obj1" "$obj2" "$line" "$diffprg" "$diff_file"
     done
 
-    rm "$diffprg"
+    eval "cat '$diff_file' | $(git_get_pager)"
+
+    rm "$diffprg" "$diff_file"
 )
 
 main "$@"
