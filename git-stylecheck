@@ -1,4 +1,6 @@
 #!/usr/bin/env sh
+# SPDX-License-Identifier:  MIT
+# Copyright 2023 Jorengarenar
 
 diff3_get_ed_patch () (
     diffprg="$1"
