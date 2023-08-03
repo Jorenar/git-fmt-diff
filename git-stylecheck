@@ -45,7 +45,9 @@ git_get_diffs () (
 
     # shellcheck disable=SC2086
     git diff $color "$cur" "$new" | \
-        sed -e "s,a$cur,a/$filename," -e "s,b$new,b/$cur_name," # TODO: dynamic sep
+        sed \
+            -e "s/$(sed_esc -p "a$cur")/$(sed_esc -s "a/$filename")/g" \
+            -e "s/$(sed_esc -p "b$new")/$(sed_esc -s "b/$cur_name")/g"
 )
 
 git_get_filenames () (
@@ -155,6 +157,14 @@ process_file () (
 
     rm "$old" "$cur" "$new" "$patch"
     rmdir "$tempdir"
+)
+
+sed_esc () (
+    if [ "$1" = "-p" ]; then
+        printf '%s\n' "$2" | sed -e 's/[]\/$*.^[]/\\&/g'
+    elif [ "$1" = "-s" ]; then
+        printf '%s\n' "$2" | sed -e 's/[\/&]/\\&/g'
+    fi
 )
 
 
