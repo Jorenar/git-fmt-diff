@@ -1,7 +1,13 @@
 #!/usr/bin/env sh
 
-sgr () (
-    printf "\033[%sm%s\033[0m" "$1" "$2"
+diff3_get_ed_patch () (
+    diffprg="$1"
+    shift 1
+    if [ -s "$2" ]; then
+        diff3 -x --diff-program="$diffprg" "$1" "$2" "$3" 2> /dev/null
+    else
+        "$diffprg" --ed "$1" "$3"
+    fi
 )
 
 gen_diffprg () (
@@ -13,27 +19,6 @@ gen_diffprg () (
     ' > "$diffprg"
     chmod +x "$diffprg"
     echo "$diffprg"
-)
-
-diff3_get_ed_patch () (
-    diffprg="$1"
-    shift 1
-    if [ -s "$2" ]; then
-        diff3 -x --diff-program="$diffprg" "$1" "$2" "$3" 2> /dev/null
-    else
-        "$diffprg" --ed "$1" "$3"
-    fi
-)
-
-git_get_filenames () (
-    git diff --diff-filter=ARMC --name-status $1 $2 | cut -f2-
-)
-
-vim_get_filetype () (
-    vim --clean -es \
-        +'exec "!echo ".&ft' \
-        +"quit!" \
-        "$1"
 )
 
 git_get_conf () (
@@ -50,10 +35,46 @@ git_get_conf () (
     git config --get "$var"
 )
 
+git_get_diffs () (
+    color="$1"
+    cur="$2"
+    new="$3"
+    filename="$4"
+
+    # shellcheck disable=SC2086
+    git diff $color "$cur" "$new" | \
+        sed -e "s,a$cur,a/$filename," -e "s,b$new,b/$cur_name," # TODO: dynamic sep
+)
+
+git_get_filenames () (
+    # shellcheck disable=SC2086
+    git diff --diff-filter=ARMC --name-status $1 $2 | cut -f2-
+)
+
 git_get_formatter () (
     ft="$(vim_get_filetype "$1")"
     [ -z "$ft" ] && return
     git_get_conf stylecheck."$ft"
+)
+
+git_get_pager () (
+    if [ -t 1 ]; then
+        echo "cat"
+        return
+    fi
+
+    pgr="$(git_get_conf pager.stylecheck)"
+    if [ -z "$pgr" ]; then
+        pgr="$(git_get_conf pager.diff)"
+        if [ -z "$pgr" ]; then
+            pgr="$(git env GIT_PAGER)"
+            if [ -z "$pgr" ]; then
+                pgr="less"
+            fi
+        fi
+    fi
+
+    echo "$pgr"
 )
 
 git_retrieve_file () (
@@ -82,35 +103,11 @@ vim_apply_patch () (
         "$in"
 )
 
-git_get_diffs () (
-    color="$1"
-    cur="$2"
-    new="$3"
-    filename="$4"
-
-    # shellcheck disable=SC2086
-    git diff $color "$cur" "$new" | \
-        sed -e "s,a$cur,a/$filename," -e "s,b$new,b/$cur_name," # TODO: dynamic sep
-)
-
-git_get_pager () (
-    if [ -t 1 ]; then
-        echo "cat"
-        return
-    fi
-
-    pgr="$(git_get_conf pager.stylecheck)"
-    if [ -z "$pgr" ]; then
-        pgr="$(git_get_conf pager.diff)"
-        if [ -z "$pgr" ]; then
-            pgr="$(git env GIT_PAGER)"
-            if [ -z "$pgr" ]; then
-                pgr="less"
-            fi
-        fi
-    fi
-
-    echo "$pgr"
+vim_get_filetype () (
+    vim --clean -es \
+        +'exec "!echo ".&ft' \
+        +"quit!" \
+        "$1"
 )
 
 process_file () (
@@ -157,6 +154,7 @@ process_file () (
     rm "$old" "$cur" "$new" "$patch"
     rmdir "$tempdir"
 )
+
 
 main () (
     obj1="${1:-HEAD}"
