@@ -12,6 +12,13 @@ diff3_get_ed_patch () (
     fi
 )
 
+warn () (
+    >&2 printf "%s: " "$(basename "$0")"
+    printf "\033[30m\033[103m"
+    >&2 echo "$@"
+    printf "\033[0m"
+)
+
 gen_diffprg () (
     diffprg="$(mktemp)"
     echo '
@@ -128,6 +135,11 @@ process_file () (
     formatter="$(git_get_formatter "$cur_name")"
 
     if [ -z "$formatter" ]; then
+        return
+    fi
+
+    if [ ! -x "$(command -v "${formatter%% *}")" ]; then
+        warn "format program '${formatter%% *}\` not found"
         return
     fi
 
