@@ -12,13 +12,6 @@ diff3_get_ed_patch () (
     fi
 )
 
-warn () (
-    >&2 printf "%s: " "$(basename "$0")"
-    printf "\033[30m\033[103m"
-    >&2 echo "$@"
-    printf "\033[0m"
-)
-
 gen_diffprg () (
     diffprg="$(mktemp)"
     echo '
@@ -177,6 +170,13 @@ sed_esc () (
     elif [ "$1" = "-s" ]; then
         printf '%s\n' "$2" | sed -e 's/[\/&]/\\&/g'
     fi
+)
+
+warn () (
+    >&2 printf "%s: " "$(basename "$0")"
+    printf "\033[30m\033[103m"
+    >&2 echo "$@"
+    printf "\033[0m"
 )
 
 
