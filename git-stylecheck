@@ -5,7 +5,7 @@
 diff3_get_ed_patch () (
     diffprg="$1"
     shift 1
-    if [ -s "$2" ]; then
+    if [ -s "$2" ] && ! diff -s "$2" "$3" > /dev/null; then
         diff3 -x --diff-program="$diffprg" "$1" "$2" "$3" 2> /dev/null
     else
         "$diffprg" --ed "$1" "$3"
