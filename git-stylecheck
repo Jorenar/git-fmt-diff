@@ -5,7 +5,7 @@
 g_no_term=
 g_use_color=
 
-_SC="stylecheck"
+_NAME="stylecheck"
 
 diff3_get_ed_patch () (
     diffprg="$1"
@@ -28,12 +28,12 @@ gen_diffprg () (
     echo "$diffprg"
 )
 
-git_get_conf () (
+git_get_conf_val () (
     var="$1"
 
-    repo_root="$(git_get_root)"
-    if [ -n "$repo_root" ] && [ -e "$repo_root"/.gitstylecheck ]; then
-        val="$(git config --file="$repo_root"/.gitstylecheck --get "$var")"
+    local_rc_file=$(git_get_local_stylecheck_conf_file)
+    if [ -n "$local_rc_file" ]; then
+        val="$(git config --file="$local_rc_file" --get "$var")"
         if [ -n "$val" ]; then
             echo "$val"
             return
@@ -43,50 +43,6 @@ git_get_conf () (
     git config --get "$var"
 )
 
-get_glob () (
-    file="$1"
-    var="$2"
-    conf="$3"
-    val=
-
-    while read -r line; do
-        opt="$(echo "$line" | cut -d= -f1)"
-        case "$_SC".glob:"$file"."$var" in
-            $opt) val="$(echo "$line" | cut -d= -f2)" ;;
-        esac
-    done << EOF
-$(git config $conf --list | grep "$_SC"'\.glob:.*\*')
-EOF
-    echo "$val"
-)
-
-git_get_stylecheck_conf () (
-    file="$1"
-    var="$2"
-    val=
-
-    repo_root="$(git_get_root)"
-    if [ -n "$repo_root" ] && [ -e "$repo_root"/.gitstylecheck ]; then
-        val="$(get_glob "$file" "$var" "$repo_root"/.gitstylecheck)"
-    fi
-
-    if [ -z "$val" ]; then
-        val="$(get_glob "$file" "$var")"
-    fi
-
-    if [ -z "$val" ]; then
-        ft="$(vim_get_filetype "$file")"
-        if [ -n "$ft" ]; then
-            val="$(git_get_conf "$_SC"."$ft"."$var")"
-            if [ -z "$val" ] && [ "$var" = "fmtprg" ]; then
-                val="$(git_get_conf "$_SC"."$ft")"
-            fi
-        fi
-    fi
-
-    echo "$val"
-)
-
 git_get_diffs () (
     cur="$1"
     new="$2"
@@ -94,7 +50,7 @@ git_get_diffs () (
 
     [ "$g_use_color" = 1 ] && color="--color" || color=
 
-    # $_SC disable=SC2086
+    # shellcheck disable=SC2086
     git diff $color "$cur" "$new" | \
         sed \
             -e "s/$(sed_esc -p "a$cur")/$(sed_esc -s "a/$filename")/g" \
@@ -102,9 +58,16 @@ git_get_diffs () (
 )
 
 git_get_filenames () (
-    # $_SC disable=SC2086
+    # shellcheck disable=SC2086
     git diff --diff-filter=ARMC --name-status $1 $2 | cut -f2-
 )
+
+git_get_local_stylecheck_conf_file () {
+    repo_root="$(git_get_root)"
+    if [ -n "$repo_root" ] && [ -e "$repo_root"/.gitstylecheck ]; then
+        echo "$repo_root"/.gitstylecheck
+    fi
+}
 
 git_get_pager () (
     if [ -t 1 ]; then
@@ -112,9 +75,9 @@ git_get_pager () (
         return
     fi
 
-    pgr="$(git_get_conf pager.$_SC)"
+    pgr="$(git_get_conf_val pager.$_NAME)"
     if [ -z "$pgr" ]; then
-        pgr="$(git_get_conf pager.diff)"
+        pgr="$(git_get_conf_val pager.diff)"
         if [ -z "$pgr" ]; then
             pgr="$(git env GIT_PAGER)"
             if [ -z "$pgr" ]; then
@@ -128,6 +91,46 @@ git_get_pager () (
 
 git_get_root () (
     git rev-parse --show-toplevel
+)
+
+git_get_stylecheck_conf_val () (
+    file="$1"
+    var="$2"
+    val=
+
+    glob () (
+        while read -r line; do
+            opt="$(echo "$line" | cut -d= -f1)"
+            # shellcheck disable=SC2254
+            case "$_NAME.glob:$file.$var" in
+                $opt) val="$(echo "$line" | cut -d= -f2)" ;;
+            esac
+        done << EOF
+$(git config $1 --list | grep "$_NAME"'\.glob:.*\*')
+EOF
+        echo "$val"
+    )
+
+    local_rc_file=$(git_get_local_stylecheck_conf_file)
+    if [ -n "$local_rc_file" ]; then
+        val="$(glob "$local_rc_file")"
+    fi
+
+    if [ -z "$val" ]; then
+        val="$(glob)"
+    fi
+
+    if [ -z "$val" ]; then
+        ft="$(vim_get_filetype "$file")"
+        if [ -n "$ft" ]; then
+            val="$(git_get_conf_val "$_NAME.ft:$ft.$var")"
+            if [ -z "$val" ] && [ "$var" = "fmtprg" ]; then
+                val="$(git_get_conf_val "$_NAME"."$ft")"
+            fi
+        fi
+    fi
+
+    echo "$val"
 )
 
 git_retrieve_file () (
@@ -158,6 +161,7 @@ vim_apply_patch () (
 
 vim_get_filetype () (
     vim --clean -es \
+        +'let c_syntax_for_h = 1'
         +'exec "!echo ".&ft' \
         +"quit!" \
         "$1"
@@ -174,7 +178,7 @@ process_file () (
     cur_name="$(echo "$line" | cut -f2)"
     [ -z "$cur_name" ] && cur_name="$old_name"
 
-    formatter="$(git_get_stylecheck_conf "$cur_name" fmtprg)"
+    formatter="$(git_get_stylecheck_conf_val "$cur_name" fmtprg)"
 
     if [ -z "$formatter" ]; then
         return
