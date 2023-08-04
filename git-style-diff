@@ -5,7 +5,7 @@
 g_no_term=
 g_use_color=
 
-_NAME="stylecheck"
+_NAME="style-diff"
 
 diff3_get_ed_patch () (
     diffprg="$1"
