@@ -29,10 +29,11 @@ gen_diffprg () (
 git_get_conf () (
     var="$1"
 
-    if [ -e ".gitconfig" ]; then
-        fmtprg="$(git config --file=.gitconfig --get "$var")"
-        if [ -n "$fmtprg" ]; then
-            echo "$fmtprg"
+    repo_root="$(git rev-parse --show-toplevel)"
+    if [ -n "$repo_root" ] && [ -e "$repo_root"/.gitstylecheck ]; then
+        val="$(git config --file="$repo_root"/.gitstylecheck --get "$var")"
+        if [ -n "$val" ]; then
+            echo "$val"
             return
         fi
     fi
@@ -62,7 +63,11 @@ git_get_filenames () (
 git_get_formatter () (
     ft="$(vim_get_filetype "$1")"
     [ -z "$ft" ] && return
-    git_get_conf stylecheck."$ft"
+    prg="$(git_get_conf stylecheck."$ft".fmtprg)"
+    if [ -z "$prg" ]; then
+        prg="$(git_get_conf stylecheck."$ft")"
+    fi
+    echo "$prg"
 )
 
 git_get_pager () (
