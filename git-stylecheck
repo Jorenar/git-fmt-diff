@@ -147,9 +147,10 @@ process_file () (
 
     tempdir="$(mktemp -d)"
 
-    old="$tempdir"/old
-    cur="$tempdir"/cur
-    new="$tempdir"/new
+    bn="$(basename "$cur_name")"
+    old="$tempdir"/old."$bn"
+    cur="$tempdir"/cur."$bn"
+    new="$tempdir"/new."$bn"
     patch="$tempdir"/patch
 
     git_retrieve_file "$obj2" "$cur_name" "$cur"
