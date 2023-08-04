@@ -3,28 +3,51 @@
 # SPDX-License-Identifier:  MIT
 # Copyright 2023 Jorengarenar
 
-g_prog_name="style-diff"
+gc_prog_name="style-diff"
+
+g_obj1=
+g_obj2=
 
 gf_no_term=
 gf_use_color=
 
-call__git_get_conf_val_multi () {
-    glob="$1"
-    shift
+# helpers {{{1
 
-    val=
+sed_esc () (
+    if [ "$1" = "-p" ]; then
+        printf '%s\n' "$2" | sed -e 's/[]\/$*.^[]/\\&/g'
+    elif [ "$1" = "-s" ]; then
+        printf '%s\n' "$2" | sed -e 's/[\/&]/\\&/g'
+    fi
+)
 
-    local_rc_file=$(git_get_local_stylecheck_conf_file)
-    if [ -n "$local_rc_file" ]; then
-        val="$($glob "$file" "$local_rc_file")"
+warn () (
+    >&2 printf "%s: " "$(basename "$0")"
+    # printf "\033[30m\033[103m"
+    >&2 echo "$@"
+    # printf "\033[0m"
+)
+
+
+detect_filetype () (
+    file="$1"
+
+    ft=$(git_conf_get__general "$1" filetype)
+
+    if [ -z "$ft" ]; then
+        ft="$(git_conf_get__call git_conf_get__cb__ft_map "$file")"
     fi
 
-    if [ -z "$val" ]; then
-        val="$($glob "$@")"
+    if [ -z "$ft" ] && [ -x "$(command -v vim)" ]; then
+        vim --clean -es \
+            +'let c_syntax_for_h = 1' \
+            +'exec "!echo ".&ft' \
+            +"quit!" \
+            "$1"
     fi
 
-    echo "$val"
-}
+    echo "$ft"
+)
 
 diff3_get_ed_patch () (
     diffprg="$1"
@@ -71,42 +94,106 @@ gen_diffprg () (
     echo "$diffprg"
 )
 
-get_filetype () (
+# git config --get {{{1
+
+git_conf_get__call () {
+    getter="$1"
+    shift
+
+    val=
+
+    repo_root="$(git rev-parse --show-toplevel)"
+    if [ -n "$repo_root" ] && [ -e "$repo_root"/.gitstylecheck ]; then
+        val="$($getter "$@" "$repo_root"/.gitstylecheck)"
+    fi
+
+    if [ -z "$val" ]; then
+        val="$($getter "$@")"
+    fi
+
+    echo "$val"
+}
+
+git_conf_get__cb__ft_map () (
     file="$1"
+    conf="$2"
 
-    ft=$(git_get_thisprog_conf_val "$1" filetype)
+    git config $conf --list | grep "$gc_prog_name"'\.map--' | while read -r line; do
+        line="$(echo "$line" | awk -F'--' '{print $2}')"
+        ft="$(echo "$line" | cut -d= -f1)"
+        ext="$(echo "$line" | cut -d= -f2 | sed 's/\s\+/|/g')"
 
-    if [ -z "$ft" ]; then
-        ft="$(call__git_get_conf_val_multi git_get_filetype "$file")"
-    fi
-
-    if [ -z "$ft" ] && [ -x "$(command -v vim)" ]; then
-        vim --clean -es \
-            +'let c_syntax_for_h = 1' \
-            +'exec "!echo ".&ft' \
-            +"quit!" \
-            "$1"
-    fi
-
-    echo "$ft"
+        eval "case '$file' in $ext) echo '$ft'; return ;; esac"
+    done
 )
 
-git_get_conf_val () (
-    var="$1"
+git_conf_get__cb__section_glob () (
+    file="$1"
+    var="$2"
+    conf="$3"
 
-    local_rc_file=$(git_get_local_stylecheck_conf_file)
-    if [ -n "$local_rc_file" ]; then
-        val="$(git config --file="$local_rc_file" --get "$var")"
-        if [ -n "$val" ]; then
-            echo "$val"
-            return
+    val=
+
+    while read -r line; do
+        opt="$(echo "$line" | cut -d= -f1)"
+        # shellcheck disable=SC2254
+        case "$gc_prog_name.glob:$file.$var" in
+            $opt) val="$(echo "$line" | cut -d= -f2)" ;;
+        esac
+    done << EOF
+$(git config $conf --list | grep "$gc_prog_name"'\.glob:.*\*')
+EOF
+
+    echo "$val"
+)
+
+git_conf_get__cb__simple () (
+    git config $2 --get "$1"
+)
+
+
+git_conf_get__general () (
+    file="$1"
+    var="$2"
+
+    val=$(git_conf_get__call git_conf_get__cb__section_glob "$file" "$var")
+
+    if [ -z "$val" ] && [ "$var" != "filetype" ]; then
+        ft="$(detect_filetype "$file")"
+        if [ -n "$ft" ]; then
+            val="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name.ft:$ft.$var")"
+            if [ -z "$val" ] && [ "$var" = "formatter" ]; then
+                val="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name.formatter--$ft")"
+            fi
         fi
     fi
 
-    git config --get "$var"
+    echo "$val"
 )
 
-git_get_diffs () (
+git_conf_get__pager () (
+    if [ "$gf_no_term" = 1 ]; then
+        echo "cat"
+        return
+    fi
+
+    pgr="$(git_conf_get__call git_conf_get__cb__simple pager.$gc_prog_name)"
+    if [ -z "$pgr" ]; then
+        pgr="$(git_conf_get__call git_conf_get__cb__simple pager.diff)"
+        if [ -z "$pgr" ]; then
+            pgr="$(git env GIT_PAGER)"
+            if [ -z "$pgr" ]; then
+                pgr="${PAGER:-less}"
+            fi
+        fi
+    fi
+
+    echo "$pgr"
+)
+
+# generating style diffs {{{1
+
+git_diff () (
     cur="$1"
     new="$2"
     filename="$3"
@@ -120,96 +207,12 @@ git_get_diffs () (
             -e "s/$(sed_esc -p "b$new")/$(sed_esc -s "b/$filename")/g"
 )
 
-git_get_filenames () (
+git_list_changed_files () (
     # shellcheck disable=SC2086
     git diff --diff-filter=ARMC --name-status $1 $2 | cut -f2-
 )
 
-git_get_filetype () (
-    file="$1"
-    conf="$2"
-
-    git config $conf --list | grep "$g_prog_name"'\.map--' | while read -r line; do
-        line="$(echo "$line" | awk -F'--' '{print $2}')"
-        ft="$(echo "$line" | cut -d= -f1)"
-        ext="$(echo "$line" | cut -d= -f2 | sed 's/\s\+/|/g')"
-
-        eval "case '$file' in $ext) echo '$ft'; return ;; esac"
-    done
-)
-
-git_get_glob_sect_val () (
-    file="$1"
-    var="$2"
-    conf="$3"
-
-    val=
-
-    while read -r line; do
-        opt="$(echo "$line" | cut -d= -f1)"
-        # shellcheck disable=SC2254
-        case "$g_prog_name.glob:$file.$var" in
-            $opt) val="$(echo "$line" | cut -d= -f2)" ;;
-        esac
-    done << EOF
-$(git config $conf --list | grep "$g_prog_name"'\.glob:.*\*')
-EOF
-
-    echo "$val"
-)
-
-git_get_local_stylecheck_conf_file () {
-    repo_root="$(git_get_root)"
-    if [ -n "$repo_root" ] && [ -e "$repo_root"/.gitstylecheck ]; then
-        echo "$repo_root"/.gitstylecheck
-    fi
-}
-
-git_get_pager () (
-    if [ -t 1 ]; then
-        echo "cat"
-        return
-    fi
-
-    pgr="$(git_get_conf_val pager.$g_prog_name)"
-    if [ -z "$pgr" ]; then
-        pgr="$(git_get_conf_val pager.diff)"
-        if [ -z "$pgr" ]; then
-            pgr="$(git env GIT_PAGER)"
-            if [ -z "$pgr" ]; then
-                pgr="less"
-            fi
-        fi
-    fi
-
-    echo "$pgr"
-)
-
-git_get_root () (
-    git rev-parse --show-toplevel
-)
-
-git_get_thisprog_conf_val () (
-    file="$1"
-    var="$2"
-    val=
-
-    val=$(call__git_get_conf_val_multi git_get_glob_sect_val "$file" "$var")
-
-    if [ -z "$val" ] && [ "$var" != "filetype" ]; then
-        ft="$(get_filetype "$file")"
-        if [ -n "$ft" ]; then
-            val="$(git_get_conf_val "$g_prog_name.ft:$ft.$var")"
-            if [ -z "$val" ] && [ "$var" = "formatter" ]; then
-                val="$(git_get_conf_val "$g_prog_name.formatter--$ft")"
-            fi
-        fi
-    fi
-
-    echo "$val"
-)
-
-git_retrieve_file () (
+git_retrieve_file_from_obj () (
     obj="$1"
     file="$2"
     out="$3"
@@ -235,7 +238,7 @@ process_file () (
     cur_name="$(echo "$line" | cut -f2)"
     [ -z "$cur_name" ] && cur_name="$old_name"
 
-    formatter="$(git_get_thisprog_conf_val "$cur_name" formatter)"
+    formatter="$(git_conf_get__general "$cur_name" formatter)"
 
     if [ -z "$formatter" ]; then
         return
@@ -254,8 +257,8 @@ process_file () (
     new="$tempdir"/new."$bn"
     patch="$tempdir"/patch
 
-    git_retrieve_file "$obj2" "$cur_name" "$cur"
-    git_retrieve_file "$obj1" "$old_name" "$old"
+    git_retrieve_file_from_obj "$obj2" "$cur_name" "$cur"
+    git_retrieve_file_from_obj "$obj1" "$old_name" "$old"
 
     eval "$formatter" "$cur" > "$new" 2> /dev/null
 
@@ -267,32 +270,18 @@ process_file () (
 
     if [ -s "$patch" ]; then
         ed_apply_patch "$cur" "$new" "$patch" && \
-            git_get_diffs "$cur" "$new" "$cur_name" >> "$outfile"
+            git_diff "$cur" "$new" "$cur_name" >> "$outfile"
     fi
 
     rm "$old" "$cur" "$new" "$patch"
     rmdir "$tempdir"
 )
 
-sed_esc () (
-    if [ "$1" = "-p" ]; then
-        printf '%s\n' "$2" | sed -e 's/[]\/$*.^[]/\\&/g'
-    elif [ "$1" = "-s" ]; then
-        printf '%s\n' "$2" | sed -e 's/[\/&]/\\&/g'
-    fi
-)
+# running {{{1
 
 usage () (
     true # TODO
 )
-
-warn () (
-    >&2 printf "%s: " "$(basename "$0")"
-    # printf "\033[30m\033[103m"
-    >&2 echo "$@"
-    # printf "\033[0m"
-)
-
 
 parse_options () {
     while :; do
@@ -343,12 +332,12 @@ main () (
     diffprg="$(gen_diffprg)"
     outfile="$(mktemp)"
 
-    git_get_filenames "$obj1" "$obj2" | while read -r line; do
+    git_list_changed_files "$obj1" "$obj2" | while read -r line; do
         process_file "$obj1" "$obj2" "$line" "$diffprg" "$outfile"
     done
 
     if [ "$gf_no_term" = 0 ]; then
-        eval "cat '$outfile' | $(git_get_pager)"
+        eval "cat '$outfile' | $(git_conf_get__pager)"
     else
         cat "$outfile"
     fi
@@ -356,10 +345,9 @@ main () (
     rm "$diffprg" "$outfile"
 )
 
+# }}}1
 
 [ -t 1 ] && gf_no_term=0 || gf_no_term=1
 
-g_obj1=
-g_obj2=
 parse_options "$@"
 main "$g_obj1" "$g_obj2"
