@@ -36,6 +36,31 @@ diff3_get_ed_patch () (
     fi
 )
 
+ed_apply_patch () (
+    in="$1"
+    out="$2"
+    patch="$3"
+
+    if [ -x "$(command -v vim)" ]; then
+        vim -u NONE -es \
+            -S "$patch" \
+            +"w! $out" \
+            +"quit!" \
+            "$in"
+    else
+        ed= ; w=
+        [ -z "$ed" ] && [ -x "$(command -v ed)" ] && ed="ed" && w="w"
+        [ -z "$ed" ] && [ -x "$(command -v ex)" ] && ed="ex" && w="w!"
+        if [ -n "$ed" ]; then
+            $ed -s "$in" << EOS
+                $(cat "$patch")
+                $w $out
+                q
+EOS
+        fi
+    fi
+)
+
 gen_diffprg () (
     diffprg="$(mktemp)"
     echo '
@@ -242,7 +267,7 @@ process_file () (
     diff3_get_ed_patch "$diffprg" "$cur" "$old" "$new" > "$patch"
 
     if [ -s "$patch" ]; then
-        vim_apply_patch "$cur" "$new" "$patch"
+        ed_apply_patch "$cur" "$new" "$patch"
         git_get_diffs "$cur" "$new" "$cur_name" >> "$outfile"
     fi
 
@@ -260,17 +285,6 @@ sed_esc () (
 
 usage () (
     true # TODO
-)
-
-vim_apply_patch () (
-    in="$1"
-    out="$2"
-    patch="$3"
-    vim -u NONE -es \
-        -S "$patch" \
-        +"w! $out" \
-        +"quit!" \
-        "$in"
 )
 
 warn () (
@@ -346,9 +360,7 @@ main () (
 
 [ -t 1 ] && gf_no_term=0 || gf_no_term=1
 
-# g_obj1=
-# g_obj2=
-# parse_options "$@"
-# main "$g_obj1" "$g_obj2"
-
-get_filetype "foo.cpp"
+g_obj1=
+g_obj2=
+parse_options "$@"
+main "$g_obj1" "$g_obj2"
