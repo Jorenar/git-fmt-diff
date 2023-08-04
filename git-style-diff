@@ -21,6 +21,10 @@ sed_esc () (
     fi
 )
 
+strip_trailing_nl () (
+    printf "%s\n" "$(cat "$1")"
+)
+
 warn () (
     >&2 printf "%s: " "$(basename "$0")"
     # printf "\033[30m\033[103m"
@@ -28,6 +32,7 @@ warn () (
     # printf "\033[0m"
 )
 
+# {{{1
 
 detect_filetype () (
     file="$1"
@@ -51,12 +56,20 @@ detect_filetype () (
 
 diff3_get_ed_patch () (
     diffprg="$1"
-    shift 1
-    if [ -s "$2" ] && ! diff -s "$2" "$3" > /dev/null; then
-        diff3 -x --diff-program="$diffprg" "$1" "$2" "$3" 2> /dev/null
+    cur="$2"
+    old="$3"
+    new="$4"
+
+    strip_trailing_nl "$old" > "$old".trim
+    strip_trailing_nl "$new" > "$new".trim
+
+    if [ -s "$old" ] && ! diff -s "$old".trim "$new".trim > /dev/null; then
+        diff3 -x --diff-program="$diffprg" "$cur" "$old" "$new" 2> /dev/null
     else
-        "$diffprg" --ed "$1" "$3"
+        "$diffprg" -e "$cur" "$new"
     fi
+
+    rm "$old".trim "$new".trim
 )
 
 ed_apply_patch () (
@@ -218,13 +231,10 @@ git_retrieve_file_from_obj () (
     out="$3"
 
     if [ -n "$obj" ]; then
-        git show "$obj":"$file" 2> /dev/null > "$out"
+        git show "${obj:+$obj:}""$file" 2> /dev/null
     elif [ -e "$file" ]; then
-        cat "$file" > "$out"
+        cat "$file"
     fi
-    ret="$?"
-    [ "$ret" != 0 ] && printf "" > "$out"
-    return "$ret"
 )
 
 process_file () (
@@ -257,8 +267,11 @@ process_file () (
     new="$tempdir"/new."$bn"
     patch="$tempdir"/patch
 
-    git_retrieve_file_from_obj "$obj2" "$cur_name" "$cur"
-    git_retrieve_file_from_obj "$obj1" "$old_name" "$old"
+    git_retrieve_file_from_obj "$obj1" "$old_name" > "$old"
+    git_retrieve_file_from_obj "$obj2" "$cur_name" > "$cur"
+    if [ ! -s "$cur" ]; then
+        warn "couldn't retrieve ${obj2:+$obj2:}$cur_name"
+    fi
 
     eval "$formatter" "$cur" > "$new" 2> /dev/null
 
@@ -311,10 +324,15 @@ parse_options () {
                 exit 1
                 ;;
             *)
-                [ -z "$g_obj1" ] && g_obj1="$1" && break
-                [ -z "$g_obj2" ] && g_obj2="$1" && break
-                warn "ignored object: $1"
-                break
+                if [ -z "$1" ]; then
+                    break
+                elif [ -z "$g_obj1" ]; then
+                    g_obj1="$1"
+                elif [ -z "$g_obj2" ]; then
+                    g_obj2="$1"
+                else
+                    warn "ignored object: $1"
+                fi
         esac
 
         shift
