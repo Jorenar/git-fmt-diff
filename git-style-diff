@@ -1,4 +1,5 @@
 #!/usr/bin/env sh
+
 # SPDX-License-Identifier:  MIT
 # Copyright 2023 Jorengarenar
 
@@ -6,6 +7,24 @@ g_prog_name="style-diff"
 
 gf_no_term=
 gf_use_color=
+
+call__git_get_conf_val_multi () {
+    glob="$1"
+    shift
+
+    val=
+
+    local_rc_file=$(git_get_local_stylecheck_conf_file)
+    if [ -n "$local_rc_file" ]; then
+        val="$($glob "$file" "$local_rc_file")"
+    fi
+
+    if [ -z "$val" ]; then
+        val="$($glob "$@")"
+    fi
+
+    echo "$val"
+}
 
 diff3_get_ed_patch () (
     diffprg="$1"
@@ -26,6 +45,26 @@ gen_diffprg () (
     ' > "$diffprg"
     chmod +x "$diffprg"
     echo "$diffprg"
+)
+
+get_filetype () (
+    file="$1"
+
+    ft=$(git_get_thisprog_conf_val "$1" filetype)
+
+    if [ -z "$ft" ]; then
+        ft="$(call__git_get_conf_val_multi git_get_filetype "$file")"
+    fi
+
+    if [ -z "$ft" ] && [ -x "$(command -v vim)" ]; then
+        vim --clean -es \
+            +'let c_syntax_for_h = 1' \
+            +'exec "!echo ".&ft' \
+            +"quit!" \
+            "$1"
+    fi
+
+    echo "$ft"
 )
 
 git_get_conf_val () (
@@ -62,6 +101,39 @@ git_get_filenames () (
     git diff --diff-filter=ARMC --name-status $1 $2 | cut -f2-
 )
 
+git_get_filetype () (
+    file="$1"
+    conf="$2"
+
+    git config $conf --list | grep "$g_prog_name"'\.map--' | while read -r line; do
+        line="$(echo "$line" | awk -F'--' '{print $2}')"
+        ft="$(echo "$line" | cut -d= -f1)"
+        ext="$(echo "$line" | cut -d= -f2 | sed 's/\s\+/|/g')"
+
+        eval "case '$file' in $ext) echo '$ft'; return ;; esac"
+    done
+)
+
+git_get_glob_sect_val () (
+    file="$1"
+    var="$2"
+    conf="$3"
+
+    val=
+
+    while read -r line; do
+        opt="$(echo "$line" | cut -d= -f1)"
+        # shellcheck disable=SC2254
+        case "$g_prog_name.glob:$file.$var" in
+            $opt) val="$(echo "$line" | cut -d= -f2)" ;;
+        esac
+    done << EOF
+$(git config $conf --list | grep "$g_prog_name"'\.glob:.*\*')
+EOF
+
+    echo "$val"
+)
+
 git_get_local_stylecheck_conf_file () {
     repo_root="$(git_get_root)"
     if [ -n "$repo_root" ] && [ -e "$repo_root"/.gitstylecheck ]; then
@@ -93,39 +165,19 @@ git_get_root () (
     git rev-parse --show-toplevel
 )
 
-git_get_stylecheck_conf_val () (
+git_get_thisprog_conf_val () (
     file="$1"
     var="$2"
     val=
 
-    glob () (
-        while read -r line; do
-            opt="$(echo "$line" | cut -d= -f1)"
-            # shellcheck disable=SC2254
-            case "$g_prog_name.glob:$file.$var" in
-                $opt) val="$(echo "$line" | cut -d= -f2)" ;;
-            esac
-        done << EOF
-$(git config $1 --list | grep "$g_prog_name"'\.glob:.*\*')
-EOF
-        echo "$val"
-    )
+    val=$(call__git_get_conf_val_multi git_get_glob_sect_val "$file" "$var")
 
-    local_rc_file=$(git_get_local_stylecheck_conf_file)
-    if [ -n "$local_rc_file" ]; then
-        val="$(glob "$local_rc_file")"
-    fi
-
-    if [ -z "$val" ]; then
-        val="$(glob)"
-    fi
-
-    if [ -z "$val" ]; then
-        ft="$(vim_get_filetype "$file")"
+    if [ -z "$val" ] && [ "$var" != "filetype" ]; then
+        ft="$(get_filetype "$file")"
         if [ -n "$ft" ]; then
             val="$(git_get_conf_val "$g_prog_name.ft:$ft.$var")"
-            if [ -z "$val" ] && [ "$var" = "fmtprg" ]; then
-                val="$(git_get_conf_val "$g_prog_name"."$ft")"
+            if [ -z "$val" ] && [ "$var" = "formatter" ]; then
+                val="$(git_get_conf_val "$g_prog_name.formatter--$ft")"
             fi
         fi
     fi
@@ -148,25 +200,6 @@ git_retrieve_file () (
     return "$ret"
 )
 
-vim_apply_patch () (
-    in="$1"
-    out="$2"
-    patch="$3"
-    vim -u NONE -es \
-        -S "$patch" \
-        +"w! $out" \
-        +"quit!" \
-        "$in"
-)
-
-vim_get_filetype () (
-    vim --clean -es \
-        +'let c_syntax_for_h = 1' \
-        +'exec "!echo ".&ft' \
-        +"quit!" \
-        "$1"
-)
-
 process_file () (
     obj1="$1"
     obj2="$2"
@@ -178,7 +211,7 @@ process_file () (
     cur_name="$(echo "$line" | cut -f2)"
     [ -z "$cur_name" ] && cur_name="$old_name"
 
-    formatter="$(git_get_stylecheck_conf_val "$cur_name" fmtprg)"
+    formatter="$(git_get_thisprog_conf_val "$cur_name" formatter)"
 
     if [ -z "$formatter" ]; then
         return
@@ -227,6 +260,17 @@ sed_esc () (
 
 usage () (
     true # TODO
+)
+
+vim_apply_patch () (
+    in="$1"
+    out="$2"
+    patch="$3"
+    vim -u NONE -es \
+        -S "$patch" \
+        +"w! $out" \
+        +"quit!" \
+        "$in"
 )
 
 warn () (
@@ -302,7 +346,9 @@ main () (
 
 [ -t 1 ] && gf_no_term=0 || gf_no_term=1
 
-g_obj1=
-g_obj2=
-parse_options "$@"
-main "$g_obj1" "$g_obj2"
+# g_obj1=
+# g_obj2=
+# parse_options "$@"
+# main "$g_obj1" "$g_obj2"
+
+get_filetype "foo.cpp"
