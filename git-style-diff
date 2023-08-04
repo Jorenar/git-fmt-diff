@@ -13,6 +13,17 @@ gf_use_color=
 
 # helpers {{{1
 
+gen_diffprg () (
+    diffprg="$(mktemp)"
+    echo '
+    #!/usr/bin/env sh
+
+    diff -d "$@"
+    ' > "$diffprg"
+    chmod +x "$diffprg"
+    echo "$diffprg"
+)
+
 sed_esc () (
     if [ "$1" = "-p" ]; then
         printf '%s\n' "$2" | sed -e 's/[]\/$*.^[]/\\&/g'
@@ -30,81 +41,6 @@ warn () (
     # printf "\033[30m\033[103m"
     >&2 echo "$@"
     # printf "\033[0m"
-)
-
-# {{{1
-
-detect_filetype () (
-    file="$1"
-
-    ft=$(git_conf_get__general "$1" filetype)
-
-    if [ -z "$ft" ]; then
-        ft="$(git_conf_get__call git_conf_get__cb__ft_map "$file")"
-    fi
-
-    if [ -z "$ft" ] && [ -x "$(command -v vim)" ]; then
-        vim --clean -es \
-            +'let c_syntax_for_h = 1' \
-            +'exec "!echo ".&ft' \
-            +"quit!" \
-            "$1"
-    fi
-
-    echo "$ft"
-)
-
-diff3_get_ed_patch () (
-    diffprg="$1"
-    cur="$2"
-    old="$3"
-    new="$4"
-
-    strip_trailing_nl "$old" > "$old".trim
-    strip_trailing_nl "$new" > "$new".trim
-
-    if [ -s "$old" ] && ! diff -s "$old".trim "$new".trim > /dev/null; then
-        diff3 -x --diff-program="$diffprg" "$cur" "$old" "$new" 2> /dev/null
-    else
-        "$diffprg" -e "$cur" "$new"
-    fi
-
-    rm "$old".trim "$new".trim
-)
-
-ed_apply_patch () (
-    in="$1"
-    out="$2"
-    patch="$3"
-
-    ed= ; w=
-    [ -z "$ed" ] && [ -x "$(command -v ed)" ] && ed="ed" && w="w"
-    [ -z "$ed" ] && [ -x "$(command -v ex)" ] && ed="ex -R" && w="w!"
-
-    if [ -n "$ed" ]; then
-        printf '%s %s\nq' "$w" "$out" >> $patch
-        $ed -s "$in" < $patch
-    elif [ -x "$(command -v vaim)" ]; then
-        vim -R -u NONE -es \
-            -S "$patch" \
-            +"w! $out" \
-            +"quit!" \
-            "$in"
-    else
-        warn "missing 'ed\` utility"
-        exit 1
-    fi
-)
-
-gen_diffprg () (
-    diffprg="$(mktemp)"
-    echo '
-    #!/usr/bin/env sh
-
-    diff -d "$@"
-    ' > "$diffprg"
-    chmod +x "$diffprg"
-    echo "$diffprg"
 )
 
 # git config --get {{{1
@@ -205,6 +141,70 @@ git_conf_get__pager () (
 )
 
 # generating style diffs {{{1
+
+detect_filetype () (
+    file="$1"
+
+    ft=$(git_conf_get__general "$1" filetype)
+
+    if [ -z "$ft" ]; then
+        ft="$(git_conf_get__call git_conf_get__cb__ft_map "$file")"
+    fi
+
+    if [ -z "$ft" ] && [ -x "$(command -v vim)" ]; then
+        vim --clean -es \
+            +'let c_syntax_for_h = 1' \
+            +'exec "!echo ".&ft' \
+            +"quit!" \
+            "$1"
+    fi
+
+    echo "$ft"
+)
+
+
+diff3_get_ed_patch () (
+    diffprg="$1"
+    cur="$2"
+    old="$3"
+    new="$4"
+
+    strip_trailing_nl "$old" > "$old".trim
+    strip_trailing_nl "$new" > "$new".trim
+
+    if [ -s "$old" ] && ! diff -s "$old".trim "$new".trim > /dev/null; then
+        diff3 -x --diff-program="$diffprg" "$cur" "$old" "$new" 2> /dev/null
+    else
+        "$diffprg" -e "$cur" "$new"
+    fi
+
+    rm "$old".trim "$new".trim
+)
+
+ed_apply_patch () (
+    in="$1"
+    out="$2"
+    patch="$3"
+
+    ed= ; w=
+    [ -z "$ed" ] && [ -x "$(command -v ed)" ] && ed="ed" && w="w"
+    [ -z "$ed" ] && [ -x "$(command -v ex)" ] && ed="ex -R" && w="w!"
+
+    if [ -n "$ed" ]; then
+        printf '%s %s\nq' "$w" "$out" >> $patch
+        $ed -s "$in" < $patch
+    elif [ -x "$(command -v vaim)" ]; then
+        vim -R -u NONE -es \
+            -S "$patch" \
+            +"w! $out" \
+            +"quit!" \
+            "$in"
+    else
+        warn "missing 'ed\` utility"
+        exit 1
+    fi
+)
+
 
 git_diff () (
     cur="$1"
