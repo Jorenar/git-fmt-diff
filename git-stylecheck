@@ -5,6 +5,8 @@
 g_no_term=
 g_use_color=
 
+_SC="stylecheck"
+
 diff3_get_ed_patch () (
     diffprg="$1"
     shift 1
@@ -29,7 +31,7 @@ gen_diffprg () (
 git_get_conf () (
     var="$1"
 
-    repo_root="$(git rev-parse --show-toplevel)"
+    repo_root="$(git_get_root)"
     if [ -n "$repo_root" ] && [ -e "$repo_root"/.gitstylecheck ]; then
         val="$(git config --file="$repo_root"/.gitstylecheck --get "$var")"
         if [ -n "$val" ]; then
@@ -41,6 +43,50 @@ git_get_conf () (
     git config --get "$var"
 )
 
+get_glob () (
+    file="$1"
+    var="$2"
+    conf="$3"
+    val=
+
+    while read -r line; do
+        opt="$(echo "$line" | cut -d= -f1)"
+        case "$_SC".glob:"$file"."$var" in
+            $opt) val="$(echo "$line" | cut -d= -f2)" ;;
+        esac
+    done << EOF
+$(git config $conf --list | grep "$_SC"'\.glob:.*\*')
+EOF
+    echo "$val"
+)
+
+git_get_stylecheck_conf () (
+    file="$1"
+    var="$2"
+    val=
+
+    repo_root="$(git_get_root)"
+    if [ -n "$repo_root" ] && [ -e "$repo_root"/.gitstylecheck ]; then
+        val="$(get_glob "$file" "$var" "$repo_root"/.gitstylecheck)"
+    fi
+
+    if [ -z "$val" ]; then
+        val="$(get_glob "$file" "$var")"
+    fi
+
+    if [ -z "$val" ]; then
+        ft="$(vim_get_filetype "$file")"
+        if [ -n "$ft" ]; then
+            val="$(git_get_conf "$_SC"."$ft"."$var")"
+            if [ -z "$val" ] && [ "$var" = "fmtprg" ]; then
+                val="$(git_get_conf "$_SC"."$ft")"
+            fi
+        fi
+    fi
+
+    echo "$val"
+)
+
 git_get_diffs () (
     cur="$1"
     new="$2"
@@ -48,7 +94,7 @@ git_get_diffs () (
 
     [ "$g_use_color" = 1 ] && color="--color" || color=
 
-    # shellcheck disable=SC2086
+    # $_SC disable=SC2086
     git diff $color "$cur" "$new" | \
         sed \
             -e "s/$(sed_esc -p "a$cur")/$(sed_esc -s "a/$filename")/g" \
@@ -56,18 +102,8 @@ git_get_diffs () (
 )
 
 git_get_filenames () (
-    # shellcheck disable=SC2086
+    # $_SC disable=SC2086
     git diff --diff-filter=ARMC --name-status $1 $2 | cut -f2-
-)
-
-git_get_formatter () (
-    ft="$(vim_get_filetype "$1")"
-    [ -z "$ft" ] && return
-    prg="$(git_get_conf stylecheck."$ft".fmtprg)"
-    if [ -z "$prg" ]; then
-        prg="$(git_get_conf stylecheck."$ft")"
-    fi
-    echo "$prg"
 )
 
 git_get_pager () (
@@ -76,7 +112,7 @@ git_get_pager () (
         return
     fi
 
-    pgr="$(git_get_conf pager.stylecheck)"
+    pgr="$(git_get_conf pager.$_SC)"
     if [ -z "$pgr" ]; then
         pgr="$(git_get_conf pager.diff)"
         if [ -z "$pgr" ]; then
@@ -88,6 +124,10 @@ git_get_pager () (
     fi
 
     echo "$pgr"
+)
+
+git_get_root () (
+    git rev-parse --show-toplevel
 )
 
 git_retrieve_file () (
@@ -134,7 +174,7 @@ process_file () (
     cur_name="$(echo "$line" | cut -f2)"
     [ -z "$cur_name" ] && cur_name="$old_name"
 
-    formatter="$(git_get_formatter "$cur_name")"
+    formatter="$(git_get_stylecheck_conf "$cur_name" fmtprg)"
 
     if [ -z "$formatter" ]; then
         return
