@@ -2,6 +2,9 @@
 # SPDX-License-Identifier:  MIT
 # Copyright 2023 Jorengarenar
 
+g_no_term=
+g_use_color=
+
 diff3_get_ed_patch () (
     diffprg="$1"
     shift 1
@@ -38,16 +41,17 @@ git_get_conf () (
 )
 
 git_get_diffs () (
-    color="$1"
-    cur="$2"
-    new="$3"
-    filename="$4"
+    cur="$1"
+    new="$2"
+    filename="$3"
+
+    [ "$g_use_color" = 1 ] && color="--color" || color=
 
     # shellcheck disable=SC2086
     git diff $color "$cur" "$new" | \
         sed \
             -e "s/$(sed_esc -p "a$cur")/$(sed_esc -s "a/$filename")/g" \
-            -e "s/$(sed_esc -p "b$new")/$(sed_esc -s "b/$cur_name")/g"
+            -e "s/$(sed_esc -p "b$new")/$(sed_esc -s "b/$filename")/g"
 )
 
 git_get_filenames () (
@@ -119,7 +123,7 @@ process_file () (
     obj2="$2"
     line="$3"
     diffprg="$4"
-    diff_file="$5"
+    outfile="$5"
 
     old_name="$(echo "$line" | cut -f1)"
     cur_name="$(echo "$line" | cut -f2)"
@@ -156,8 +160,7 @@ process_file () (
 
     if [ -s "$patch" ]; then
         vim_apply_patch "$cur" "$new" "$patch"
-        [ -t 1 ] && git_color_opt="--color" || git_color_opt=
-        git_get_diffs "$git_color_opt" "$cur" "$new" "$cur_name" >> "$diff_file"
+        git_get_diffs "$cur" "$new" "$cur_name" >> "$outfile"
     fi
 
     rm "$old" "$cur" "$new" "$patch"
@@ -172,28 +175,84 @@ sed_esc () (
     fi
 )
 
-warn () (
-    >&2 printf "%s: " "$(basename "$0")"
-    printf "\033[30m\033[103m"
-    >&2 echo "$@"
-    printf "\033[0m"
+usage () (
+    true # TODO
 )
 
+warn () (
+    >&2 printf "%s: " "$(basename "$0")"
+    # printf "\033[30m\033[103m"
+    >&2 echo "$@"
+    # printf "\033[0m"
+)
+
+
+parse_options () {
+    while :; do
+        case $1 in
+            -h)
+                usage
+                exit
+                ;;
+            --help)
+                man "$0"
+                exit
+                ;;
+            --color)
+                g_use_color=1
+                ;;
+            --no-color)
+                g_use_color=0
+                ;;
+            --)
+                g_obj1="$2"
+                g_obj2="$3"
+                break
+                ;;
+            -?*)
+                warn "unknown option: $1"
+                usage
+                exit 1
+                ;;
+            *)
+                [ -z "$g_obj1" ] && g_obj1="$1" && break
+                [ -z "$g_obj2" ] && g_obj2="$1" && break
+                warn "ignored object: $1"
+                break
+        esac
+
+        shift
+    done
+
+    if [ -z "$g_use_color" ] && [ "$g_no_term" = 0 ]; then
+        g_use_color=1
+    fi
+}
 
 main () (
     obj1="${1:-HEAD}"
     obj2="$2"
 
     diffprg="$(gen_diffprg)"
-    diff_file="$(mktemp)"
+    outfile="$(mktemp)"
 
     git_get_filenames "$obj1" "$obj2" | while read -r line; do
-        process_file "$obj1" "$obj2" "$line" "$diffprg" "$diff_file"
+        process_file "$obj1" "$obj2" "$line" "$diffprg" "$outfile"
     done
 
-    eval "cat '$diff_file' | $(git_get_pager)"
+    if [ "$g_no_term" = 0 ]; then
+        eval "cat '$outfile' | $(git_get_pager)"
+    else
+        cat "$outfile"
+    fi
 
-    rm "$diffprg" "$diff_file"
+    rm "$diffprg" "$outfile"
 )
 
-main "$@"
+
+[ -t 1 ] && g_no_term=0 || g_no_term=1
+
+g_obj1=
+g_obj2=
+parse_options "$@"
+main "$g_obj1" "$g_obj2"
