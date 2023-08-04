@@ -41,23 +41,22 @@ ed_apply_patch () (
     out="$2"
     patch="$3"
 
-    if [ -x "$(command -v vim)" ]; then
-        vim -u NONE -es \
+    ed= ; w=
+    [ -z "$ed" ] && [ -x "$(command -v ed)" ] && ed="ed" && w="w"
+    [ -z "$ed" ] && [ -x "$(command -v ex)" ] && ed="ex -R" && w="w!"
+
+    if [ -n "$ed" ]; then
+        printf '%s %s\nq' "$w" "$out" >> $patch
+        $ed -s "$in" < $patch
+    elif [ -x "$(command -v vaim)" ]; then
+        vim -R -u NONE -es \
             -S "$patch" \
             +"w! $out" \
             +"quit!" \
             "$in"
     else
-        ed= ; w=
-        [ -z "$ed" ] && [ -x "$(command -v ed)" ] && ed="ed" && w="w"
-        [ -z "$ed" ] && [ -x "$(command -v ex)" ] && ed="ex" && w="w!"
-        if [ -n "$ed" ]; then
-            $ed -s "$in" << EOS
-                $(cat "$patch")
-                $w $out
-                q
-EOS
-        fi
+        warn "missing 'ed\` utility"
+        exit 1
     fi
 )
 
@@ -267,8 +266,8 @@ process_file () (
     diff3_get_ed_patch "$diffprg" "$cur" "$old" "$new" > "$patch"
 
     if [ -s "$patch" ]; then
-        ed_apply_patch "$cur" "$new" "$patch"
-        git_get_diffs "$cur" "$new" "$cur_name" >> "$outfile"
+        ed_apply_patch "$cur" "$new" "$patch" && \
+            git_get_diffs "$cur" "$new" "$cur_name" >> "$outfile"
     fi
 
     rm "$old" "$cur" "$new" "$patch"
