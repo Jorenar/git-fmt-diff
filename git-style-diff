@@ -191,9 +191,9 @@ ed_apply_patch () (
     [ -z "$ed" ] && [ -x "$(command -v ex)" ] && ed="ex -R" && w="w!"
 
     if [ -n "$ed" ]; then
-        printf '%s %s\nq' "$w" "$out" >> $patch
-        $ed -s "$in" < $patch
-    elif [ -x "$(command -v vaim)" ]; then
+        printf '%s %s\nq' "$w" "$out" >> "$patch"
+        $ed -s "$in" < "$patch"
+    elif [ -x "$(command -v vim)" ]; then
         vim -R -u NONE -es \
             -S "$patch" \
             +"w! $out" \
