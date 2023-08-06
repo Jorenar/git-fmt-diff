@@ -24,6 +24,29 @@ gen_diffprg () (
     echo "$diffprg"
 )
 
+get_pager () (
+    if [ "$gf_no_term" = 1 ]; then
+        echo "cat"
+        return
+    fi
+
+    pgr="$(git_conf_get pager.$gc_prog_name)"
+
+    if [ -z "$pgr" ]; then
+        pgr="$(git_conf_get pager.diff)"
+    fi
+
+    if [ -z "$pgr" ]; then
+        pgr="$(git env GIT_PAGER)"
+    fi
+
+    if [ -z "$pgr" ]; then
+        pgr="${PAGER:-less}"
+    fi
+
+    echo "$pgr"
+)
+
 sed_esc () (
     if [ "$1" = "-p" ]; then
         printf '%s\n' "$2" | sed -e 's/[]\/$*.^[]/\\&/g'
@@ -67,6 +90,7 @@ git_conf_get__cb__ft_map () (
     file="$1"
     conf="$2"
 
+    # shellcheck disable=SC2086
     git config $conf --list | grep "$gc_prog_name"'\.map--' | while read -r line; do
         line="$(echo "$line" | awk -F'--' '{print $2}')"
         ft="$(echo "$line" | cut -d= -f1)"
@@ -83,6 +107,7 @@ git_conf_get__cb__section_glob () (
 
     val=
 
+    # shellcheck disable=SC2086
     while read -r line; do
         opt="$(echo "$line" | cut -d= -f1)"
         # shellcheck disable=SC2254
@@ -97,15 +122,24 @@ EOF
 )
 
 git_conf_get__cb__simple () (
+    # shellcheck disable=SC2086
     git config $2 --get "$1"
 )
 
+git_conf_get () (
+    if [ -z "$2" ]; then
+        git_conf_get__call git_conf_get__cb__simple "$1"
+        return
+    fi
 
-git_conf_get__general () (
     file="$1"
     var="$2"
 
     val=$(git_conf_get__call git_conf_get__cb__section_glob "$file" "$var")
+
+    if [ -z "$val" ] && [ "$var" = "filetype" ]; then
+        val="$(git_conf_get__call git_conf_get__cb__ft_map "$file")"
+    fi
 
     if [ -z "$val" ] && [ "$var" != "filetype" ]; then
         ft="$(detect_filetype "$file")"
@@ -120,36 +154,12 @@ git_conf_get__general () (
     echo "$val"
 )
 
-git_conf_get__pager () (
-    if [ "$gf_no_term" = 1 ]; then
-        echo "cat"
-        return
-    fi
-
-    pgr="$(git_conf_get__call git_conf_get__cb__simple pager.$gc_prog_name)"
-    if [ -z "$pgr" ]; then
-        pgr="$(git_conf_get__call git_conf_get__cb__simple pager.diff)"
-        if [ -z "$pgr" ]; then
-            pgr="$(git env GIT_PAGER)"
-            if [ -z "$pgr" ]; then
-                pgr="${PAGER:-less}"
-            fi
-        fi
-    fi
-
-    echo "$pgr"
-)
-
 # generating style diffs {{{1
 
 detect_filetype () (
     file="$1"
 
-    ft=$(git_conf_get__general "$1" filetype)
-
-    if [ -z "$ft" ]; then
-        ft="$(git_conf_get__call git_conf_get__cb__ft_map "$file")"
-    fi
+    ft=$(git_conf_get "$1" filetype)
 
     if [ -z "$ft" ] && [ -x "$(command -v vim)" ]; then
         vim --clean -es \
@@ -252,7 +262,7 @@ process_file () (
     cur_name="$(echo "$line" | cut -f2)"
     [ -z "$cur_name" ] && cur_name="$old_name"
 
-    formatter="$(git_conf_get__general "$cur_name" formatter)"
+    formatter="$(git_conf_get "$cur_name" formatter)"
 
     if [ -z "$formatter" ]; then
         return
@@ -359,7 +369,7 @@ main () (
     done
 
     if [ "$gf_no_term" = 0 ]; then
-        eval "cat '$outfile' | $(git_conf_get__pager)"
+        eval "cat '$outfile' | $(get_pager)"
     else
         cat "$outfile"
     fi
