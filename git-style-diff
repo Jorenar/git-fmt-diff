@@ -8,6 +8,9 @@ gc_prog_name="style-diff"
 g_obj1=
 g_obj2=
 
+g_config=
+g_local_rc=
+
 gf_debug=
 gf_no_term=
 gf_use_color=
@@ -47,27 +50,32 @@ warn () (
 
 # git config --get {{{1
 
-git_conf_get__call_ () {
+# shellcheck disable=SC2142,SC2154
+alias _git_conf_get__prep_conf_file_arg_='conf="$1"; [ -n "$conf" ] && conf="--file \"$conf\""; shift'
+
+git_conf_get__call_ () (
     getter="$1"
     shift
 
     val=
 
-    repo_root="$(git rev-parse --show-toplevel 2> /dev/null)"
-    if [ -n "$repo_root" ] && [ -e "$repo_root"/.gitstylecheck ]; then
-        val="$($getter "$@" "$repo_root"/.gitstylecheck)"
+    if [ -n "$g_local_rc" ]; then
+        val="$($getter "$g_local_rc" "$@")"
     fi
 
     if [ -z "$val" ]; then
-        val="$($getter "$@")"
+        val="$($getter "$g_config" "$@")"
     fi
 
     echo "$val"
-}
+)
 
 _git_conf_get__cb__ft_map () (
+    _git_conf_get__prep_conf_file_arg_
+
     file="$1"
-    conf="$2"
+
+    debug "args =" "$@"
 
     # shellcheck disable=SC2086
     git config $conf --get-regexp "$gc_prog_name"'\.map--' | while read -r line; do
@@ -88,9 +96,10 @@ _git_conf_get__cb__ft_map () (
 )
 
 _git_conf_get__cb__section_glob () (
+    _git_conf_get__prep_conf_file_arg_
+
     file="$1"
     var="$2"
-    conf="$3"
 
     val=
 
@@ -109,8 +118,10 @@ EOF
 )
 
 _git_conf_get__cb__simple () (
+    _git_conf_get__prep_conf_file_arg_
+    debug "args =" "$@"
     # shellcheck disable=SC2086
-    git config $2 --get "$1"
+    git config $conf --get "$@"
 )
 
 
@@ -139,19 +150,13 @@ git_conf_get__pager () (
         return
     fi
 
-    pgr="$(git_conf_get pager.$gc_prog_name)"
-
-    if [ -z "$pgr" ]; then
-        pgr="$(git_conf_get pager.diff)"
-    fi
-
-    if [ -z "$pgr" ]; then
-        pgr="$(git env GIT_PAGER)"
-    fi
-
-    if [ -z "$pgr" ]; then
-        pgr="${PAGER:-less}"
-    fi
+    pgr=
+    [ -z "$pgr" ] && pgr="$(git_conf_get pager.$gc_prog_name)"
+    [ -z "$pgr" ] && pgr="$(git_conf_get pager.diff)"
+    [ -z "$pgr" ] && pgr="$(git_conf_get core.pager)"
+    [ -z "$pgr" ] && pgr="$GIT_PAGER"
+    [ -z "$pgr" ] && pgr="$PAGER"
+    [ -z "$pgr" ] && pgr="less"
 
     echo "$pgr"
 )
@@ -265,7 +270,7 @@ ed_apply_patch () (
             +"quit!" \
             "$in"
     else
-        warn "missing 'ed\` utility"
+        warn "missing 'ed' utility"
         exit 1
     fi
 )
@@ -331,7 +336,7 @@ process_file () (
     fi
 
     if [ ! -x "$(command -v "${formatter%% *}")" ]; then
-        warn "format program '${formatter%% *}\` not found"
+        warn "format program '${formatter%% *}' not found"
         return
     fi
 
@@ -385,7 +390,7 @@ usage () (
 
 parse_options () {
     while :; do
-        case $1 in
+        case "$1" in
             -h)
                 usage
                 exit
@@ -396,6 +401,14 @@ parse_options () {
                 ;;
             --debug)
                 gf_debug=1
+                ;;
+            -c|--config)
+                g_config="$2"
+                if [ -z "$g_config" ]; then
+                    warn "option 'config' requires a path to config file as argument"
+                    exit 1
+                fi
+                shift
                 ;;
             --color)
                 gf_use_color=1
@@ -429,6 +442,13 @@ parse_options () {
     done
 
     [ -t 1 ] && gf_no_term=0 || gf_no_term=1
+
+    repo_root="$(git rev-parse --show-toplevel 2> /dev/null)"
+    if [ -z "$g_config" ] && [ -n "$repo_root" ]; then
+        if [ -e "$repo_root"/.gitstylediff ]; then
+            g_local_rc="$repo_root/.gitstylediff"
+        fi
+    fi
 
     if [ -z "$gf_use_color" ] && [ "$gf_no_term" = 0 ]; then
         gf_use_color=1
