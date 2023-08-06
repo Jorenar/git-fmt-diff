@@ -113,8 +113,55 @@ git_conf_get__cb__simple () (
     git config $2 --get "$1"
 )
 
+
+git_conf_get__ft_formatter () (
+    file="$1"
+    ft="$2"
+
+    debug "args =" "$@"
+
+    fmt="$(git_conf_get__call git_conf_get__cb__section_glob "$file" "formatter--$ft")"
+
+    if [ -z "$fmt" ]; then
+        fmt="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name.ft:$ft.formatter")"
+    fi
+
+    if [ -z "$fmt" ]; then
+        fmt="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name.formatter--$ft")"
+    fi
+
+    echo "$fmt"
+)
+
+git_conf_get__pager () (
+    if [ "$gf_no_term" = 1 ]; then
+        echo "cat"
+        return
+    fi
+
+    pgr="$(git_conf_get pager.$gc_prog_name)"
+
+    if [ -z "$pgr" ]; then
+        pgr="$(git_conf_get pager.diff)"
+    fi
+
+    if [ -z "$pgr" ]; then
+        pgr="$(git env GIT_PAGER)"
+    fi
+
+    if [ -z "$pgr" ]; then
+        pgr="${PAGER:-less}"
+    fi
+
+    echo "$pgr"
+)
+
+
 git_conf_get () (
-    if [ -z "$2" ]; then
+    if [ "$1" = "pager" ]; then
+        git_conf_get__pager
+        return
+    elif [ -z "$2" ]; then
         git_conf_get__call git_conf_get__cb__simple "$1"
         return
     fi
@@ -124,19 +171,24 @@ git_conf_get () (
 
     val=$(git_conf_get__call git_conf_get__cb__section_glob "$file" "$var")
 
-    if [ -z "$val" ] && [ "$var" != "filetype" ]; then
-        ft="$(detect_filetype "$file")"
-        if [ -n "$ft" ]; then
-            val="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name.ft:$ft.$var")"
-
-            if [ -z "$val" ] && [ "$var" = "formatter" ]; then
-                val="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name.formatter--$ft")"
-            fi
-        fi
-    fi
-
     if [ -z "$val" ] && [ "$var" = "filetype" ]; then
         val="$(git_conf_get__call git_conf_get__cb__ft_map "$file")"
+        [ -z "$val" ] && return 1
+    fi
+
+    if [ -z "$val" ]; then
+        ft="$(detect_filetype "$file")"
+        if [ -n "$ft" ]; then
+            debug "var = $var"
+            case "$var" in
+                formatter)
+                    val="$(git_conf_get__ft_formatter "$file" "$ft")"
+                    ;;
+                *)
+                    val="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name.ft:$ft.$var")"
+                    ;;
+            esac
+        fi
     fi
 
     if [ -z "$val" ] && [ "$var" = "formatter" ]; then
@@ -272,6 +324,7 @@ process_file () (
     esac
 
     formatter="$(git_conf_get "$cur_name" formatter)"
+    debug "formatter = $formatter"
 
     if [ -z "$formatter" ]; then
         return
@@ -324,29 +377,6 @@ gen_diffprg () (
     ' > "$diffprg"
     chmod +x "$diffprg"
     echo "$diffprg"
-)
-
-get_pager () (
-    if [ "$gf_no_term" = 1 ]; then
-        echo "cat"
-        return
-    fi
-
-    pgr="$(git_conf_get pager.$gc_prog_name)"
-
-    if [ -z "$pgr" ]; then
-        pgr="$(git_conf_get pager.diff)"
-    fi
-
-    if [ -z "$pgr" ]; then
-        pgr="$(git env GIT_PAGER)"
-    fi
-
-    if [ -z "$pgr" ]; then
-        pgr="${PAGER:-less}"
-    fi
-
-    echo "$pgr"
 )
 
 usage () (
@@ -417,7 +447,7 @@ main () (
         process_file "$obj1" "$obj2" "$line" "$diffprg" "$outfile"
     done
 
-    eval "cat '$outfile' | $(get_pager)"
+    eval "cat '$outfile' | $(git_conf_get pager)"
 
     rm "$diffprg" "$outfile"
 )
