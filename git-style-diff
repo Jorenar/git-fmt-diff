@@ -354,7 +354,7 @@ process_file () (
         warn "couldn't retrieve ${obj2:+$obj2:}$cur_name"
     fi
 
-    eval "$formatter" "$cur" > "$new" 2> /dev/null
+    { eval "$formatter"; } < "$cur" > "$new" 2> /dev/null
 
     if diff -s "$cur" "$new" > /dev/null; then
         return
@@ -467,7 +467,7 @@ main () (
         process_file "$obj1" "$obj2" "$line" "$diffprg" "$outfile"
     done
 
-    eval "cat '$outfile' | $(git_conf_get pager)"
+    { eval "$(git_conf_get pager)"; } < "$outfile"
 
     rm "$diffprg" "$outfile"
 )
