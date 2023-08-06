@@ -8,10 +8,19 @@ gc_prog_name="style-diff"
 g_obj1=
 g_obj2=
 
+gf_debug=
 gf_no_term=
 gf_use_color=
 
 # helpers {{{1
+
+debug () (
+    [ "$gf_debug" != 1 ] && return
+    >&2 printf "[debug] %s @ %s:%d # " "$(basename "$0")" "$1" "$2"
+    shift 2
+    >&2 echo "$@"
+)
+alias debug='debug "$FUNCNAME" "$LINENO"'
 
 pat_list_to_case () (
     sed 's/\s\+/|/g'
@@ -130,8 +139,12 @@ git_conf_get () (
         val="$(git_conf_get__call git_conf_get__cb__ft_map "$file")"
     fi
 
+    if [ -z "$val" ] && [ "$var" = "formatter" ]; then
+        val="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name"."$var")"
+    fi
+
     if [ -z "$val" ] && [ "$var" = "ignore" ]; then
-        list="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name".ignore)"
+        list="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name"."$var")"
         if [ -n "$list" ]; then
             list="$(echo "$list" | pat_list_to_case)"
             # shellcheck disable=SC2254
@@ -252,6 +265,8 @@ process_file () (
     cur_name="$(echo "$line" | cut -f2)"
     [ -z "$cur_name" ] && cur_name="$old_name"
 
+    debug "cur_name = $cur_name"
+
     case "$(git_conf_get "$cur_name" ignore)" in
         true|1) return ;;
     esac
@@ -349,6 +364,9 @@ parse_options () {
                 man "$0"
                 exit
                 ;;
+            --debug)
+                gf_debug=1
+                ;;
             --color)
                 gf_use_color=1
                 ;;
@@ -395,6 +413,7 @@ main () (
     outfile="$(mktemp)"
 
     git_list_changed_files "$obj1" "$obj2" | while read -r line; do
+        debug "$line"
         process_file "$obj1" "$obj2" "$line" "$diffprg" "$outfile"
     done
 
