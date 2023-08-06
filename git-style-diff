@@ -47,7 +47,7 @@ warn () (
 
 # git config --get {{{1
 
-git_conf_get__call () {
+git_conf_get__call_ () {
     getter="$1"
     shift
 
@@ -65,7 +65,7 @@ git_conf_get__call () {
     echo "$val"
 }
 
-git_conf_get__cb__ft_map () (
+_git_conf_get__cb__ft_map () (
     file="$1"
     conf="$2"
 
@@ -87,7 +87,7 @@ git_conf_get__cb__ft_map () (
     done
 )
 
-git_conf_get__cb__section_glob () (
+_git_conf_get__cb__section_glob () (
     file="$1"
     var="$2"
     conf="$3"
@@ -108,7 +108,7 @@ EOF
     echo "$val"
 )
 
-git_conf_get__cb__simple () (
+_git_conf_get__cb__simple () (
     # shellcheck disable=SC2086
     git config $2 --get "$1"
 )
@@ -120,14 +120,14 @@ git_conf_get__ft_formatter () (
 
     debug "args =" "$@"
 
-    fmt="$(git_conf_get__call git_conf_get__cb__section_glob "$file" "formatter--$ft")"
+    fmt="$(git_conf_get__call_ _git_conf_get__cb__section_glob "$file" "formatter--$ft")"
 
     if [ -z "$fmt" ]; then
-        fmt="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name.ft:$ft.formatter")"
+        fmt="$(git_conf_get__call_ _git_conf_get__cb__simple "$gc_prog_name.ft:$ft.formatter")"
     fi
 
     if [ -z "$fmt" ]; then
-        fmt="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name.formatter--$ft")"
+        fmt="$(git_conf_get__call_ _git_conf_get__cb__simple "$gc_prog_name.formatter--$ft")"
     fi
 
     echo "$fmt"
@@ -162,17 +162,17 @@ git_conf_get () (
         git_conf_get__pager
         return
     elif [ -z "$2" ]; then
-        git_conf_get__call git_conf_get__cb__simple "$1"
+        git_conf_get__call_ _git_conf_get__cb__simple "$1"
         return
     fi
 
     file="$1"
     var="$2"
 
-    val=$(git_conf_get__call git_conf_get__cb__section_glob "$file" "$var")
+    val=$(git_conf_get__call_ _git_conf_get__cb__section_glob "$file" "$var")
 
     if [ -z "$val" ] && [ "$var" = "filetype" ]; then
-        val="$(git_conf_get__call git_conf_get__cb__ft_map "$file")"
+        val="$(git_conf_get__call_ _git_conf_get__cb__ft_map "$file")"
         [ -z "$val" ] && return 1
     fi
 
@@ -185,18 +185,18 @@ git_conf_get () (
                     val="$(git_conf_get__ft_formatter "$file" "$ft")"
                     ;;
                 *)
-                    val="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name.ft:$ft.$var")"
+                    val="$(git_conf_get__call_ _git_conf_get__cb__simple "$gc_prog_name.ft:$ft.$var")"
                     ;;
             esac
         fi
     fi
 
     if [ -z "$val" ] && [ "$var" = "formatter" ]; then
-        val="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name"."$var")"
+        val="$(git_conf_get__call_ _git_conf_get__cb__simple "$gc_prog_name"."$var")"
     fi
 
     if [ -z "$val" ] && [ "$var" = "ignore" ]; then
-        list="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name"."$var")"
+        list="$(git_conf_get__call_ _git_conf_get__cb__simple "$gc_prog_name"."$var")"
         if [ -n "$list" ]; then
             list="$(echo "$list" | pat_list_to_case)"
             # shellcheck disable=SC2254
