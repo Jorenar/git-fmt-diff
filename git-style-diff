@@ -13,6 +13,10 @@ gf_use_color=
 
 # helpers {{{1
 
+pat_list_to_case () (
+    sed 's/\s\+/|/g'
+)
+
 sed_esc () (
     if [ "$1" = "-p" ]; then
         printf '%s\n' "$2" | sed -e 's/[]\/$*.^[]/\\&/g'
@@ -59,10 +63,18 @@ git_conf_get__cb__ft_map () (
     # shellcheck disable=SC2086
     git config $conf --get-regexp "$gc_prog_name"'\.map--' | while read -r line; do
         line="$(echo "$line" | awk -F'--' '{print $2}')"
-        ft="$(echo "$line" | cut -d= -f1)"
-        ext="$(echo "$line" | cut -d= -f2- | sed 's/\s\+/|/g')"
+        ft="$(echo "$line" | cut -d' ' -f1)"
+        ext="$(echo "$line" | cut -d' ' -f2- | pat_list_to_case)"
 
-        eval "case '$file' in $ext) echo '$ft'; return ;; esac"
+        echo "$ft" > ~/test
+
+        # shellcheck disable=SC2254
+        case "$file" in
+            $ext)
+                echo "$ft"
+                return
+                ;;
+        esac
     done
 )
 
@@ -125,7 +137,7 @@ git_conf_get () (
 detect_filetype () (
     file="$1"
 
-    ft=$(git_conf_get "$1" filetype)
+    ft="$(git_conf_get "$1" filetype)"
 
     if [ -z "$ft" ] && [ -x "$(command -v vim)" ]; then
         vim --clean -es \
