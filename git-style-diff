@@ -91,10 +91,10 @@ git_conf_get__cb__ft_map () (
     conf="$2"
 
     # shellcheck disable=SC2086
-    git config $conf --list | grep "$gc_prog_name"'\.map--' | while read -r line; do
+    git config $conf --get-regexp "$gc_prog_name"'\.map--' | while read -r line; do
         line="$(echo "$line" | awk -F'--' '{print $2}')"
         ft="$(echo "$line" | cut -d= -f1)"
-        ext="$(echo "$line" | cut -d= -f2 | sed 's/\s\+/|/g')"
+        ext="$(echo "$line" | cut -d= -f2- | sed 's/\s\+/|/g')"
 
         eval "case '$file' in $ext) echo '$ft'; return ;; esac"
     done
@@ -109,13 +109,13 @@ git_conf_get__cb__section_glob () (
 
     # shellcheck disable=SC2086
     while read -r line; do
-        opt="$(echo "$line" | cut -d= -f1)"
+        opt="$(echo "$line" | cut -d' ' -f1)"
         # shellcheck disable=SC2254
         case "$gc_prog_name.glob:$file.$var" in
-            $opt) val="$(echo "$line" | cut -d= -f2)" ;;
+            $opt) val="$(echo "$line" | cut -d' ' -f2-)" ;;
         esac
     done << EOF
-$(git config $conf --list | grep "$gc_prog_name"'\.glob:.*\*')
+$(git config $conf --get-regexp "$gc_prog_name"'\.glob:')
 EOF
 
     echo "$val"
