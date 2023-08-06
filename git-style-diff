@@ -13,40 +13,6 @@ gf_use_color=
 
 # helpers {{{1
 
-gen_diffprg () (
-    diffprg="$(mktemp)"
-    echo '
-    #!/usr/bin/env sh
-
-    diff -d "$@"
-    ' > "$diffprg"
-    chmod +x "$diffprg"
-    echo "$diffprg"
-)
-
-get_pager () (
-    if [ "$gf_no_term" = 1 ]; then
-        echo "cat"
-        return
-    fi
-
-    pgr="$(git_conf_get pager.$gc_prog_name)"
-
-    if [ -z "$pgr" ]; then
-        pgr="$(git_conf_get pager.diff)"
-    fi
-
-    if [ -z "$pgr" ]; then
-        pgr="$(git env GIT_PAGER)"
-    fi
-
-    if [ -z "$pgr" ]; then
-        pgr="${PAGER:-less}"
-    fi
-
-    echo "$pgr"
-)
-
 sed_esc () (
     if [ "$1" = "-p" ]; then
         printf '%s\n' "$2" | sed -e 's/[]\/$*.^[]/\\&/g'
@@ -306,6 +272,40 @@ process_file () (
 
 # running {{{1
 
+gen_diffprg () (
+    diffprg="$(mktemp)"
+    echo '
+    #!/usr/bin/env sh
+
+    diff -d "$@"
+    ' > "$diffprg"
+    chmod +x "$diffprg"
+    echo "$diffprg"
+)
+
+get_pager () (
+    if [ "$gf_no_term" = 1 ]; then
+        echo "cat"
+        return
+    fi
+
+    pgr="$(git_conf_get pager.$gc_prog_name)"
+
+    if [ -z "$pgr" ]; then
+        pgr="$(git_conf_get pager.diff)"
+    fi
+
+    if [ -z "$pgr" ]; then
+        pgr="$(git env GIT_PAGER)"
+    fi
+
+    if [ -z "$pgr" ]; then
+        pgr="${PAGER:-less}"
+    fi
+
+    echo "$pgr"
+)
+
 usage () (
     true # TODO
 )
@@ -352,6 +352,8 @@ parse_options () {
         shift
     done
 
+    [ -t 1 ] && gf_no_term=0 || gf_no_term=1
+
     if [ -z "$gf_use_color" ] && [ "$gf_no_term" = 0 ]; then
         gf_use_color=1
     fi
@@ -368,18 +370,12 @@ main () (
         process_file "$obj1" "$obj2" "$line" "$diffprg" "$outfile"
     done
 
-    if [ "$gf_no_term" = 0 ]; then
-        eval "cat '$outfile' | $(get_pager)"
-    else
-        cat "$outfile"
-    fi
+    eval "cat '$outfile' | $(get_pager)"
 
     rm "$diffprg" "$outfile"
 )
 
 # }}}1
-
-[ -t 1 ] && gf_no_term=0 || gf_no_term=1
 
 parse_options "$@"
 main "$g_obj1" "$g_obj2"
