@@ -115,17 +115,29 @@ git_conf_get () (
 
     val=$(git_conf_get__call git_conf_get__cb__section_glob "$file" "$var")
 
-    if [ -z "$val" ] && [ "$var" = "filetype" ]; then
-        val="$(git_conf_get__call git_conf_get__cb__ft_map "$file")"
-    fi
-
     if [ -z "$val" ] && [ "$var" != "filetype" ]; then
         ft="$(detect_filetype "$file")"
         if [ -n "$ft" ]; then
             val="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name.ft:$ft.$var")"
+
             if [ -z "$val" ] && [ "$var" = "formatter" ]; then
                 val="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name.formatter--$ft")"
             fi
+        fi
+    fi
+
+    if [ -z "$val" ] && [ "$var" = "filetype" ]; then
+        val="$(git_conf_get__call git_conf_get__cb__ft_map "$file")"
+    fi
+
+    if [ -z "$val" ] && [ "$var" = "ignore" ]; then
+        list="$(git_conf_get__call git_conf_get__cb__simple "$gc_prog_name".ignore)"
+        if [ -n "$list" ]; then
+            list="$(echo "$list" | pat_list_to_case)"
+            # shellcheck disable=SC2254
+            case "$file" in
+                $list) val=1 ;;
+            esac
         fi
     fi
 
@@ -239,6 +251,10 @@ process_file () (
     old_name="$(echo "$line" | cut -f1)"
     cur_name="$(echo "$line" | cut -f2)"
     [ -z "$cur_name" ] && cur_name="$old_name"
+
+    case "$(git_conf_get "$cur_name" ignore)" in
+        true|1) return ;;
+    esac
 
     formatter="$(git_conf_get "$cur_name" formatter)"
 
