@@ -37,10 +37,6 @@ sed_esc () (
     fi
 )
 
-strip_trailing_nl () (
-    printf "%s\n" "$(cat "$1")"
-)
-
 warn () (
     >&2 printf "%s: " "$(basename "$0")"
     # printf "\033[30m\033[103m"
@@ -77,7 +73,7 @@ _git_conf_get__cb__ft_map () (
 
     debug "args =" "$@"
 
-    # shellcheck disable=SC2086
+    # shellcheck disable=SC2086,SC2154
     git config $conf --get-regexp "$gc_prog_name"'\.map--' | while read -r line; do
         line="$(echo "$line" | awk -F'--' '{print $2}')"
         ft="$(echo "$line" | cut -d' ' -f1)"
@@ -214,7 +210,7 @@ git_conf_get () (
     echo "$val"
 )
 
-# generating style diffs {{{1
+# processing files {{{1
 
 detect_filetype () (
     file="$1"
@@ -232,25 +228,35 @@ detect_filetype () (
     echo "$ft"
 )
 
-
-diff3_merge () (
-    diffprg="$1"
+git_changes_formatted () (
+    tempdir="$1"
     cur="$2"
     old="$3"
-    new="$4"
+    cur_fmt="$4"
+    old_fmt="$5"
 
-    strip_trailing_nl "$old" > "$old".trim
-    strip_trailing_nl "$new" > "$new".trim
+    merge () { git merge-file -p "$@"; }
+    temp="$tempdir"/temp
 
-    if [ -s "$old" ] && ! diff -s "$old".trim "$new".trim > /dev/null; then
-        diff3 -x -m --diff-program="$diffprg" "$cur" "$old" "$new" 2> /dev/null
-    else
-        cat "$new"
+    if git diff -s "$cur_fmt" "$old_fmt"; then
+        merge --our "$cur" "$old" "$cur_fmt" > "$temp"
+        merge "$cur" "$temp" "$cur_fmt"
+        [ "$gf_debug" != 1 ] && rm "$temp"
+        return
     fi
 
-    rm "$old".trim "$new".trim
-)
+    fmtcng="$tempdir"/fmtcng
+    merge --their "$old" "$old_fmt" "$cur_fmt" > "$fmtcng"
+    merge --our "$old" "$old_fmt" "$cur" > "$temp"
 
+    if git diff -s "$fmtcng" "$temp"; then
+        cat "$cur"
+    else
+        cat "$fmtcng"
+    fi
+
+    [ "$gf_debug" != 1 ] && rm "$fmtcng" "$temp"
+)
 
 git_diff () (
     cur="$1"
@@ -278,7 +284,6 @@ git_list_changed_files () (
 git_retrieve_file_from_obj () (
     obj="$1"
     file="$2"
-    out="$3"
 
     debug "obj = '$obj'"
     debug "file = '$file'"
@@ -294,8 +299,7 @@ process_file () (
     obj1="$1"
     obj2="$2"
     line="$3"
-    diffprg="$4"
-    outfile="$5"
+    outfile="$4"
 
     old_name="$(echo "$line" | cut -f1)"
     cur_name="$(echo "$line" | cut -f2)"
@@ -321,10 +325,11 @@ process_file () (
 
     tempdir="$(mktemp -d)"
 
-    old="$tempdir"/old
     cur="$tempdir"/cur
+    old="$tempdir"/old
+    cur_fmt="$tempdir"/cur_fmt
+    old_fmt="$tempdir"/old_fmt
     fmt="$tempdir"/fmt
-    patched="$tempdir"/patched
 
     git_retrieve_file_from_obj "$obj1" "$old_name" > "$old"
     git_retrieve_file_from_obj "$obj2" "$cur_name" > "$cur"
@@ -332,37 +337,25 @@ process_file () (
         warn "couldn't retrieve ${obj2:+$obj2:}$cur_name"
     fi
 
-    { eval "$formatter"; } < "$cur" > "$fmt" 2> /dev/null
+    { eval "$formatter"; } < "$cur" > "$cur_fmt" 2> /dev/null
 
-    if diff -s "$cur" "$fmt" > /dev/null; then
+    if git diff -s "$cur" "$cur_fmt"; then
         return
     fi
 
-    diff3_merge "$diffprg" "$cur" "$old" "$fmt" > "$patched"
+    { eval "$formatter"; } < "$old" > "$old_fmt" 2> /dev/null
 
-    if [ -s "$patched" ]; then
-        git_diff "$cur" "$patched" "$cur_name" >> "$outfile"
-    fi
+    git_changes_formatted "$tempdir" "$cur" "$old" "$cur_fmt" "$old_fmt" > "$fmt"
+    git_diff "$cur" "$fmt" "$cur_name" >> "$outfile"
 
     debug "$cur_name => $tempdir"
     if [ "$gf_debug" != 1 ]; then
-        rm "$old" "$cur" "$fmt" "$patched"
+        rm "$old" "$cur" "$cur_fmt" "$old_fmt" "$fmt"
         rmdir "$tempdir"
     fi
 )
 
 # running {{{1
-
-gen_diffprg () (
-    diffprg="$(mktemp)"
-    echo '
-    #!/usr/bin/env sh
-
-    diff -d "$@"
-    ' > "$diffprg"
-    chmod +x "$diffprg"
-    echo "$diffprg"
-)
 
 usage () (
     true # TODO
@@ -439,18 +432,17 @@ main () (
     obj1="${1:-HEAD}"
     obj2="$2"
 
-    diffprg="$(gen_diffprg)"
     outfile="$(mktemp)"
 
     git_list_changed_files "$obj1" "$obj2" | while read -r line; do
         debug "$line"
         [ -e "$obj1" ] && obj1="HEAD"
-        process_file "$obj1" "$obj2" "$line" "$diffprg" "$outfile"
+        process_file "$obj1" "$obj2" "$line" "$outfile"
     done
 
     { eval "$(git_conf_get pager)"; } < "$outfile"
 
-    rm "$diffprg" "$outfile"
+    rm "$outfile"
 )
 
 # }}}1
