@@ -233,7 +233,7 @@ detect_filetype () (
 )
 
 
-diff3_get_ed_patch () (
+diff3_merge () (
     diffprg="$1"
     cur="$2"
     old="$3"
@@ -243,36 +243,12 @@ diff3_get_ed_patch () (
     strip_trailing_nl "$new" > "$new".trim
 
     if [ -s "$old" ] && ! diff -s "$old".trim "$new".trim > /dev/null; then
-        diff3 -x --diff-program="$diffprg" "$cur" "$old" "$new" 2> /dev/null
+        diff3 -x -m --diff-program="$diffprg" "$cur" "$old" "$new" 2> /dev/null
     else
-        "$diffprg" -e "$cur" "$new"
+        cat "$new"
     fi
 
     rm "$old".trim "$new".trim
-)
-
-ed_apply_patch () (
-    in="$1"
-    out="$2"
-    patch="$3"
-
-    ed= ; w=
-    [ -z "$ed" ] && [ -x "$(command -v ed)" ] && ed="ed" && w="w"
-    [ -z "$ed" ] && [ -x "$(command -v ex)" ] && ed="ex -R" && w="w!"
-
-    if [ -n "$ed" ]; then
-        printf '%s %s\nq' "$w" "$out" >> "$patch"
-        $ed -s "$in" < "$patch"
-    elif [ -x "$(command -v vim)" ]; then
-        vim -R -u NONE -es \
-            -S "$patch" \
-            +"w! $out" \
-            +"quit!" \
-            "$in"
-    else
-        warn "missing 'ed' utility"
-        exit 1
-    fi
 )
 
 
@@ -304,8 +280,11 @@ git_retrieve_file_from_obj () (
     file="$2"
     out="$3"
 
+    debug "obj = '$obj'"
+    debug "file = '$file'"
+
     if [ -n "$obj" ]; then
-        git show "${obj:+$obj:}""$file" 2> /dev/null
+        git show "$obj:$file" 2> /dev/null
     elif [ -e "$file" ]; then
         cat "$file"
     fi
@@ -342,11 +321,10 @@ process_file () (
 
     tempdir="$(mktemp -d)"
 
-    bn="$(basename "$cur_name")"
-    old="$tempdir"/old."$bn"
-    cur="$tempdir"/cur."$bn"
-    new="$tempdir"/new."$bn"
-    patch="$tempdir"/patch
+    old="$tempdir"/old
+    cur="$tempdir"/cur
+    fmt="$tempdir"/fmt
+    patched="$tempdir"/patched
 
     git_retrieve_file_from_obj "$obj1" "$old_name" > "$old"
     git_retrieve_file_from_obj "$obj2" "$cur_name" > "$cur"
@@ -354,21 +332,23 @@ process_file () (
         warn "couldn't retrieve ${obj2:+$obj2:}$cur_name"
     fi
 
-    { eval "$formatter"; } < "$cur" > "$new" 2> /dev/null
+    { eval "$formatter"; } < "$cur" > "$fmt" 2> /dev/null
 
-    if diff -s "$cur" "$new" > /dev/null; then
+    if diff -s "$cur" "$fmt" > /dev/null; then
         return
     fi
 
-    diff3_get_ed_patch "$diffprg" "$cur" "$old" "$new" > "$patch"
+    diff3_merge "$diffprg" "$cur" "$old" "$fmt" > "$patched"
 
-    if [ -s "$patch" ]; then
-        ed_apply_patch "$cur" "$new" "$patch" && \
-            git_diff "$cur" "$new" "$cur_name" >> "$outfile"
+    if [ -s "$patched" ]; then
+        git_diff "$cur" "$patched" "$cur_name" >> "$outfile"
     fi
 
-    rm "$old" "$cur" "$new" "$patch"
-    rmdir "$tempdir"
+    debug "$cur_name => $tempdir"
+    if [ "$gf_debug" != 1 ]; then
+        rm "$old" "$cur" "$fmt" "$patched"
+        rmdir "$tempdir"
+    fi
 )
 
 # running {{{1
@@ -464,6 +444,7 @@ main () (
 
     git_list_changed_files "$obj1" "$obj2" | while read -r line; do
         debug "$line"
+        [ -e "$obj1" ] && obj1="HEAD"
         process_file "$obj1" "$obj2" "$line" "$diffprg" "$outfile"
     done
 
