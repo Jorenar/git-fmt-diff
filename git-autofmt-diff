@@ -11,6 +11,8 @@ g_obj2=
 g_config=
 g_local_rc=
 
+g_cached_opt=
+
 gf_debug=
 gf_no_term=
 gf_use_color=
@@ -273,12 +275,23 @@ git_diff () (
 )
 
 git_list_changed_files () (
-    if git rev-parse --is-inside-work-tree 2> /dev/null 1>&2; then
-        # shellcheck disable=SC2086
-        git diff --diff-filter=ARMC --name-status $1 $2 | cut -f2-
-    elif [ -s "$1" ]; then
-        echo "$1"
+    obj1="$1"
+    obj2="$2"
+
+    [ "$obj1" = "HEAD" ] && obj1=
+
+    if ! git rev-parse --is-inside-work-tree 2> /dev/null 1>&2; then
+        [ -s "$obj1" ] && echo "$obj1"
+        return
     fi
+
+    if [ -e "$obj1" ] && ! git ls-files --error-unmatch "$obj1" 2> /dev/null; then
+        echo "$1"
+        return
+    fi
+
+    # shellcheck disable=SC2086
+    git diff $g_cached_opt --diff-filter=ARMC --name-status $obj1 $obj2 | cut -f2-
 )
 
 git_retrieve_file_from_obj () (
@@ -346,7 +359,8 @@ process_file () (
     { eval "$formatter"; } < "$old" > "$old_fmt" 2> /dev/null
 
     git_changes_formatted "$tempdir" "$cur" "$old" "$cur_fmt" "$old_fmt" > "$fmt"
-    git_diff "$cur" "$fmt" "$cur_name" >> "$outfile"
+
+    git_diff "$cur" "$fmt" "$cur_name"
 
     debug "$cur_name => $tempdir"
     if [ "$gf_debug" != 1 ]; then
@@ -371,6 +385,9 @@ parse_options () {
             --help)
                 man "$0"
                 exit
+                ;;
+            --cached|--staged)
+                g_cached_opt="--cached"
                 ;;
             --debug)
                 gf_debug=1
@@ -437,7 +454,7 @@ main () (
     git_list_changed_files "$obj1" "$obj2" | while read -r line; do
         debug "$line"
         [ -e "$obj1" ] && obj1="HEAD"
-        process_file "$obj1" "$obj2" "$line" "$outfile"
+        process_file "$obj1" "$obj2" "$line" >> "$outfile"
     done
 
     { eval "$(git_conf_get pager)"; } < "$outfile"
