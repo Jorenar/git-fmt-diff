@@ -76,7 +76,7 @@ _git_conf_get__cb__ft_map () (
     debug "args =" "$@"
 
     # shellcheck disable=SC2086,SC2154
-    git config $conf --get-regexp "$gc_prog_name"'\.map--' | while read -r line; do
+    git config $conf --get-regexp "$gc_prog_name"'\.map-' | while read -r line; do
         line="$(echo "$line" | awk -F'--' '{print $2}')"
         ft="$(echo "$line" | cut -d' ' -f1)"
         ext="$(echo "$line" | cut -d' ' -f2- | pat_list_to_case)"
@@ -129,14 +129,14 @@ git_conf_get__ft_formatter () (
 
     debug "args =" "$@"
 
-    fmt="$(git_conf_get__call_ _git_conf_get__cb__section_glob "$file" "formatter=$ft")"
+    fmt="$(git_conf_get__call_ _git_conf_get__cb__section_glob "$file" "formatter-$ft")"
 
     if [ -z "$fmt" ]; then
         fmt="$(git_conf_get__call_ _git_conf_get__cb__simple "$gc_prog_name.=$ft.formatter")"
     fi
 
     if [ -z "$fmt" ]; then
-        fmt="$(git_conf_get__call_ _git_conf_get__cb__simple "$gc_prog_name.formatter=$ft")"
+        fmt="$(git_conf_get__call_ _git_conf_get__cb__simple "$gc_prog_name.formatter-$ft")"
     fi
 
     echo "$fmt"
