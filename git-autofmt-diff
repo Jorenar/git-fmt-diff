@@ -3,7 +3,7 @@
 # SPDX-License-Identifier:  MIT
 # Copyright 2023 Jorengarenar
 
-gc_prog_name="style-diff"
+gc_prog_name="autofmt-diff"
 
 g_obj1=
 g_obj2=
@@ -418,8 +418,8 @@ parse_options () {
 
     repo_root="$(git rev-parse --show-toplevel 2> /dev/null)"
     if [ -z "$g_config" ] && [ -n "$repo_root" ]; then
-        if [ -e "$repo_root"/.gitstylediff ]; then
-            g_local_rc="$repo_root/.gitstylediff"
+        if [ -e "$repo_root/.git-$gc_prog_name" ]; then
+            g_local_rc="$repo_root/.git-$gc_prog_name"
         fi
     fi
 
