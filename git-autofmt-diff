@@ -350,13 +350,13 @@ process_file () (
         warn "couldn't retrieve ${obj2:+$obj2:}$cur_name"
     fi
 
-    { eval "$formatter"; } < "$cur" > "$cur_fmt" 2> /dev/null
+    sh -c "$formatter" < "$cur" > "$cur_fmt" 2> /dev/null
 
     if git diff -s "$cur" "$cur_fmt"; then
         return
     fi
 
-    { eval "$formatter"; } < "$old" > "$old_fmt" 2> /dev/null
+    sh -c "$formatter" < "$old" > "$old_fmt" 2> /dev/null
 
     git_changes_formatted "$tempdir" "$cur" "$old" "$cur_fmt" "$old_fmt" > "$fmt"
 
@@ -457,7 +457,7 @@ main () (
         process_file "$obj1" "$obj2" "$line" >> "$outfile"
     done
 
-    { eval "$(git_conf_get pager)"; } < "$outfile"
+    sh -c "$(git_conf_get pager)" < "$outfile"
 
     rm "$outfile"
 )
