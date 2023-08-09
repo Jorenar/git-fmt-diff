@@ -8,8 +8,8 @@ do
         continue
     fi
 
-    if [ -x "$(command -v git-autofmt-diff)" ]; then
-        out="$(git autofmt-diff --color "$remote_oid" "$local_oid")"
+    if [ -x "$(command -v git-fmt-diff)" ]; then
+        out="$(git fmt-diff --color "$remote_oid" "$local_oid")"
         if [ -n "$out" ]; then
             echo "$out"
 

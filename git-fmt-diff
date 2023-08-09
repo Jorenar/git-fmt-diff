@@ -3,7 +3,7 @@
 # SPDX-License-Identifier:  MIT
 # Copyright 2023 Jorengarenar
 
-gc_prog_name="autofmt-diff"
+gc_prog_name="fmt-diff"
 
 g_obj1=
 g_obj2=
