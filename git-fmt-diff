@@ -287,7 +287,7 @@ git_list_changed_files () (
         return
     fi
 
-    if [ -e "$obj1" ] && ! git ls-files --error-unmatch "$obj1" 2> /dev/null; then
+    if [ -e "$obj1" ] && ! git ls-files --error-unmatch "$obj1" 2> /dev/null 1>&2; then
         echo "$1"
         return
     fi
