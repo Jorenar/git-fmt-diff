@@ -19,6 +19,20 @@ gf_use_color=
 
 # helpers {{{1
 
+abspath() (
+    if [ -d "$1" ]; then
+        cd "$1" && pwd
+    elif [ -f "$1" ]; then
+        case "$1" in
+            /*)  echo "$1" ;;
+            */*) echo "$(cd "$(dirname "$1")" && pwd)/$(basename "$1")" ;;
+            *)   echo "$PWD/$1" ;;
+        esac
+    else
+        warn "no such file or directory"
+    fi
+)
+
 debug () (
     [ "$3" != "--" ] && [ "$gf_debug" != 1 ] && return
     >&2 printf "[debug] %s @ %s:%d # " "$(basename "$0")" "$1" "$2"
@@ -276,26 +290,6 @@ git_diff () (
             -e "s/$(sed_esc -p "b$new")/$(sed_esc -s "b/$filename")/g"
 )
 
-git_list_changed_files () (
-    obj1="$1"
-    obj2="$2"
-
-    [ "$obj1" = "HEAD" ] && obj1=
-
-    if ! git rev-parse --is-inside-work-tree 2> /dev/null 1>&2; then
-        [ -s "$obj1" ] && echo "$obj1"
-        return
-    fi
-
-    if [ -e "$obj1" ] && ! git ls-files --error-unmatch "$obj1" 2> /dev/null 1>&2; then
-        echo "$1"
-        return
-    fi
-
-    # shellcheck disable=SC2086
-    git diff $g_cached_opt --diff-filter=ARMC --name-status $obj1 $obj2 | cut -f2-
-)
-
 git_retrieve_file_from_obj () (
     obj="$1"
     file="$2"
@@ -372,6 +366,26 @@ process_file () (
 )
 
 # running {{{1
+
+list_files () (
+    obj1="$1"
+    obj2="$2"
+
+    [ "$obj1" = "HEAD" ] && obj1=
+
+    if ! git rev-parse --is-inside-work-tree 2> /dev/null 1>&2; then
+        [ -s "$obj1" ] && abspath "$obj1"
+        return
+    fi
+
+    if [ -e "$obj1" ] && ! git ls-files --error-unmatch "$obj1" 2> /dev/null 1>&2; then
+        abspath "$obj1"
+        return
+    fi
+
+    # shellcheck disable=SC2086
+    git diff $g_cached_opt --diff-filter=ARMC --name-status $obj1 $obj2 | cut -f2-
+)
 
 usage () (
     true # TODO
@@ -453,7 +467,12 @@ main () (
 
     outfile="$(mktemp)"
 
-    git_list_changed_files "$obj1" "$obj2" | while read -r line; do
+    files="$(list_files "$obj1" "$obj2")"
+
+    repo_root="$(git rev-parse --show-toplevel 2> /dev/null)"
+    [ -n "$repo_root" ] && { cd "$repo_root" || exit 1; }
+
+    echo "$files" | while read -r line; do
         debug "$line"
         [ -e "$obj1" ] && obj1="HEAD"
         process_file "$obj1" "$obj2" "$line" >> "$outfile"
