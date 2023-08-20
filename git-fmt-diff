@@ -19,7 +19,7 @@ gf_use_color=
 
 # helpers {{{1
 
-abspath() (
+abspath () (
     if [ -d "$1" ]; then
         cd "$1" && pwd
     elif [ -f "$1" ]; then
@@ -297,7 +297,9 @@ git_retrieve_file_from_obj () (
     debug "obj = '$obj'"
     debug "file = '$file'"
 
-    if [ -n "$obj" ]; then
+    if [ -e "$file" ] && [ "$obj" = "$file" ]; then
+        cat "$file"
+    elif [ -n "$obj" ]; then
         git show "$obj:$file" 2> /dev/null
     elif [ -e "$file" ]; then
         cat "$file"
@@ -348,19 +350,21 @@ process_file () (
 
     sh -c "$formatter" < "$cur" > "$cur_fmt" 2> /dev/null
 
-    if git diff -s "$cur" "$cur_fmt"; then
-        return
+    if ! git diff -s "$cur" "$cur_fmt"; then
+        sh -c "$formatter" < "$old" > "$old_fmt" 2> /dev/null
+
+        git_changes_formatted "$tempdir" "$cur" "$old" "$cur_fmt" "$old_fmt" > "$fmt"
+
+        if [ -s "$fmt" ]; then
+            git_diff "$cur" "$fmt" "$cur_name"
+        fi
+
+        [ "$gf_debug" != 1 ] && rm "$old_fmt" "$fmt"
     fi
-
-    sh -c "$formatter" < "$old" > "$old_fmt" 2> /dev/null
-
-    git_changes_formatted "$tempdir" "$cur" "$old" "$cur_fmt" "$old_fmt" > "$fmt"
-
-    git_diff "$cur" "$fmt" "$cur_name"
 
     debug "$cur_name => $tempdir"
     if [ "$gf_debug" != 1 ]; then
-        rm "$old" "$cur" "$cur_fmt" "$old_fmt" "$fmt"
+        rm "$old" "$cur" "$cur_fmt"
         rmdir "$tempdir"
     fi
 )
@@ -388,7 +392,8 @@ list_files () (
 )
 
 usage () (
-    true # TODO
+    cat << EOU
+EOU
 )
 
 parse_options () {
