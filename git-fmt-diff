@@ -15,7 +15,7 @@ g_local_rc=
 
 g_cached_opt=
 
-gf_debug=
+gf_debug=0
 gf_no_term=
 gf_use_color=
 
@@ -38,7 +38,7 @@ abspath () (
 )
 
 debug () (
-    [ "$3" != "--" ] && [ "$gf_debug" != 1 ] && return
+    [ "$3" != "--" ] && [ "$gf_debug" -eq 0 ] && return
     >&2 printf "[debug] %s @ %s:%d # " "$(basename "$0")" "$1" "$2"
     shift 2
     >&2 echo "$@"
@@ -50,7 +50,7 @@ pat_list_to_case () (
 )
 
 rm_ () (
-    [ "$gf_debug" = 1 ] && return
+    [ "$gf_debug" -eq 2 ] && return
     if [ "$1" = "-d" ]; then
         shift
         rmdir "$@"
@@ -277,10 +277,12 @@ git_changes_formatted () (
     diff_fmt="$tempdir"/diff_fmt
     temp="$tempdir"/temp
 
+    trap 'rm_ "$temp"' EXIT
+
     if git diff -s "$cur_fmt" "$old_fmt"; then
         merge --our "$cur" "$old" "$cur_fmt" > "$temp"
-        merge "$cur" "$temp" "$cur_fmt"
-        rm_ "$temp"
+        merge "$cur" "$temp" "$cur_fmt" > "$diff_fmt"
+        echo "$diff_fmt"
         return
     fi
 
@@ -298,8 +300,6 @@ git_changes_formatted () (
     else
         rm_ "$diff_fmt"
     fi
-
-    rm_ "$temp"
 )
 
 git_diff () (
@@ -439,6 +439,9 @@ parse_options () {
                 ;;
             --debug)
                 gf_debug=1
+                ;;
+            --debug=*)
+                gf_debug="${1#--debug=}"
                 ;;
             -c|--config)
                 g_config="$2"
