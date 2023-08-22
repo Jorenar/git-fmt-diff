@@ -19,6 +19,8 @@ gf_debug=0
 gf_no_term=
 gf_use_color=
 
+g_rm_list="$(mktemp)"
+
 # }}}
 
 # helpers {{{1
@@ -37,6 +39,19 @@ abspath () (
     fi
 )
 
+cleanup () (
+    sed '1!G;h;$!d' "$g_rm_list" | while read -r path; do
+        if [ -d "$path" ]; then
+            for f in "$path"/*; do
+                [ -e "$f" ] && [ ! -s "$f" ] && rm "$f"
+            done
+            rmdir "$path"
+        else
+            rm "$path"
+        fi
+    done
+)
+
 debug () (
     [ "$3" != "--" ] && [ "$gf_debug" -eq 0 ] && return
     >&2 printf "[debug] %s @ %s:%d # " "$(basename "$0")" "$1" "$2"
@@ -49,14 +64,15 @@ pat_list_to_case () (
     sed 's/\s\+/|/g'
 )
 
-rm_ () (
+rm_list__push () (
     [ "$gf_debug" -eq 2 ] && return
-    if [ "$1" = "-d" ]; then
-        shift
-        rmdir "$@"
-    else
-        rm "$@"
+    if [ -z "$g_rm_list" ]; then
+        g_rm_list="$(mktemp)"
+        rm_list__push "$g_rm_list"
     fi
+    for f in "$@"; do
+        echo "$f" >> "$g_rm_list"
+    done
 )
 
 sed_esc () (
@@ -66,12 +82,6 @@ sed_esc () (
         printf '%s\n' "$2" | sed -e 's/[\/&]/\\&/g'
     fi
 )
-
-setup_env () {
-    TMPDIR="${TMPDIR:-/tmp}"/git-"$gc_prog_name"
-    mkdir -p "$TMPDIR"
-    trap 'rm_ -d "$TMPDIR" 2> /dev/null' EXIT
-}
 
 warn () (
     >&2 printf "%s: " "$(basename "$0")"
@@ -277,7 +287,7 @@ git_changes_formatted () (
     diff_fmt="$tempdir"/diff_fmt
     temp="$tempdir"/temp
 
-    trap 'rm_ "$temp"' EXIT
+    rm_list__push "$temp"
 
     if git diff -s "$cur_fmt" "$old_fmt"; then
         merge --our "$cur" "$old" "$cur_fmt" > "$temp"
@@ -287,6 +297,7 @@ git_changes_formatted () (
     fi
 
     merge --their "$old" "$old_fmt" "$cur_fmt" > "$diff_fmt"
+    rm_list__push "$diff_fmt"
 
     merge --our "$diff_fmt" "$old" "$cur" > "$temp"
     if ! git diff -s "$diff_fmt" "$temp"; then
@@ -297,8 +308,6 @@ git_changes_formatted () (
     merge --our "$old" "$old_fmt" "$cur" > "$temp"
     if ! git diff -s "$diff_fmt" "$temp"; then
         echo "$diff_fmt"
-    else
-        rm_ "$diff_fmt"
     fi
 )
 
@@ -336,13 +345,12 @@ process_file () (
     obj1="$1"
     obj2="$2"
     line="$3"
-    outfile="$4"
 
     old_name="$(echo "$line" | cut -f1)"
     cur_name="$(echo "$line" | cut -f2)"
     [ -z "$cur_name" ] && cur_name="$old_name"
 
-    debug "cur_name = $cur_name"
+    debug "--- PROCESSING: $cur_name ---"
 
     case "$(git_conf_get "$cur_name" ignore)" in
         true|1) return ;;
@@ -361,6 +369,9 @@ process_file () (
     fi
 
     tempdir="$(mktemp -d)"
+    rm_list__push "$tempdir"
+
+    debug "$cur_name => $tempdir"
 
     cur="$tempdir"/cur
     old="$tempdir"/old
@@ -369,14 +380,18 @@ process_file () (
 
     git_retrieve_file_from_obj "$obj1" "$old_name" > "$old"
     git_retrieve_file_from_obj "$obj2" "$cur_name" > "$cur"
+    rm_list__push "$old" "$cur"
+
     if [ ! -s "$cur" ]; then
         warn "couldn't retrieve ${obj2:+$obj2:}$cur_name"
     fi
 
     sh -c "$formatter" < "$cur" > "$cur_fmt" 2> /dev/null
+    rm_list__push "$cur_fmt"
 
     if ! git diff -s "$cur" "$cur_fmt"; then
         sh -c "$formatter" < "$old" > "$old_fmt" 2> /dev/null
+        rm_list__push "$old_fmt"
 
         diff_fmt="$(git_changes_formatted \
             "$tempdir" \
@@ -385,15 +400,8 @@ process_file () (
 
         if [ -n "$diff_fmt" ]; then
             git_diff "$cur" "$diff_fmt" "$cur_name"
-            rm_ "$diff_fmt"
         fi
-
-        rm_ "$old_fmt"
     fi
-
-    debug "$cur_name => $tempdir"
-    rm_ "$old" "$cur" "$cur_fmt"
-    rm_ -d "$tempdir"
 )
 
 # running {{{1
@@ -417,6 +425,14 @@ list_files () (
     # shellcheck disable=SC2086
     git diff $g_cached_opt --diff-filter=ARMC --name-status $obj1 $obj2 | cut -f2-
 )
+
+setup_env () {
+    TMPDIR="${TMPDIR:-/tmp}"/git-"$gc_prog_name"
+    mkdir -p "$TMPDIR"
+    rm_list__push "$TMPDIR"
+
+    trap 'cleanup' EXIT
+}
 
 usage () (
     cat << EOU
@@ -500,23 +516,33 @@ main () (
     obj1="${1:-HEAD}"
     obj2="$2"
 
-    outfile="$(mktemp)"
-    debug "OUTFILE: $outfile"
+    outdir="$(mktemp -d)"
+    rm_list__push "$outdir"
+    debug "OUTDIR: $outdir"
 
-    files="$(list_files "$obj1" "$obj2")"
+    files="$(list_files "$obj1" "$obj2")"  # must be before 'cd $repo_root'
 
     repo_root="$(git rev-parse --show-toplevel 2> /dev/null)"
     [ -n "$repo_root" ] && { cd "$repo_root" || exit 1; }
 
-    echo "$files" | while read -r line; do
+    i=0
+    i_len="$(echo "$files" | wc -l | tr -d '\n' | wc -m)"
+    while read -r line; do
         debug "$line"
+
         [ -e "$obj1" ] && obj1="HEAD"
-        process_file "$obj1" "$obj2" "$line" >> "$outfile"
-    done
+        outfile="$(printf '%s/%.*d' "$outdir" "$i_len" "$i")"
 
-    sh -c "$(git_conf_get pager)" < "$outfile"
+        process_file "$obj1" "$obj2" "$line" > "$outfile" &
+        rm_list__push "$outfile"
 
-    rm_ "$outfile"
+        i=$((i+1))
+    done << EOL
+$files
+EOL
+
+    wait
+    cat "$outdir"/* | sh -c "$(git_conf_get pager)"
 )
 
 # }}}1
