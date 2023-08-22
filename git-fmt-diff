@@ -265,11 +265,15 @@ git_changes_formatted () (
 
     fmtcng="$tempdir"/fmtcng
     merge --their "$old" "$old_fmt" "$cur_fmt" > "$fmtcng"
-    merge --our "$old" "$old_fmt" "$cur" > "$temp"
 
-    if git diff -s "$fmtcng" "$temp"; then
-        cat "$cur"
-    else
+    merge --our "$fmtcng" "$old" "$cur" > "$temp"
+    if ! git diff -s "$fmtcng" "$temp"; then
+        merge --their "$cur" "$fmtcng" "$cur_fmt" > "$temp"
+        merge --their "$cur" "$temp" "$cur_fmt" > "$fmtcng"
+    fi
+
+    merge --our "$old" "$old_fmt" "$cur" > "$temp"
+    if ! git diff -s "$fmtcng" "$temp"; then
         cat "$fmtcng"
     fi
 
