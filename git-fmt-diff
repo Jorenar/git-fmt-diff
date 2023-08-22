@@ -268,9 +268,9 @@ detect_filetype () (
     if [ -z "$ft" ] && [ -x "$(command -v vim)" ]; then
         vim --clean -es \
             +'let c_syntax_for_h = 1' \
+            +"e $1" \
             +'exec "!echo ".&ft' \
-            +"quit!" \
-            "$1"
+            +"quit!"
     fi
 
     echo "$ft"
@@ -288,6 +288,7 @@ git_changes_formatted () (
     temp="$tempdir"/temp
 
     rm_list__push "$temp"
+    rm_list__push "$diff_fmt"
 
     if git diff -s "$cur_fmt" "$old_fmt"; then
         merge --our "$cur" "$old" "$cur_fmt" > "$temp"
@@ -297,7 +298,6 @@ git_changes_formatted () (
     fi
 
     merge --their "$old" "$old_fmt" "$cur_fmt" > "$diff_fmt"
-    rm_list__push "$diff_fmt"
 
     merge --our "$diff_fmt" "$old" "$cur" > "$temp"
     if ! git diff -s "$diff_fmt" "$temp"; then
