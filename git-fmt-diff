@@ -275,10 +275,10 @@ detect_filetype () (
 
 git_changes_formatted () (
     tempdir="$1"
-    cur="$2"
-    old="$3"
-    cur_fmt="$4"
-    old_fmt="$5"
+    b="$2"
+    a="$3"
+    b_fmt="$4"
+    a_fmt="$5"
 
     merge () { git merge-file -p "$@"; }
     diff_fmt="$tempdir"/diff_fmt
@@ -287,39 +287,39 @@ git_changes_formatted () (
     rm_list__push "$temp"
     rm_list__push "$diff_fmt"
 
-    if git diff -s "$cur_fmt" "$old_fmt"; then
-        merge --our "$cur" "$old" "$cur_fmt" > "$temp"
-        merge "$cur" "$temp" "$cur_fmt" > "$diff_fmt"
+    if git diff -s "$b_fmt" "$a_fmt"; then
+        merge --our "$b" "$a" "$b_fmt" > "$temp"
+        merge "$b" "$temp" "$b_fmt" > "$diff_fmt"
         echo "$diff_fmt"
         return
     fi
 
-    merge --their "$old" "$old_fmt" "$cur_fmt" > "$diff_fmt"
+    merge --their "$a" "$a_fmt" "$b_fmt" > "$diff_fmt"
 
-    merge --our "$diff_fmt" "$old" "$cur" > "$temp"
+    merge --our "$diff_fmt" "$a" "$b" > "$temp"
     if ! git diff -s "$diff_fmt" "$temp"; then
-        merge --their "$cur" "$diff_fmt" "$cur_fmt" > "$temp"
-        merge --their "$cur" "$temp" "$cur_fmt" > "$diff_fmt"
+        merge --their "$b" "$diff_fmt" "$b_fmt" > "$temp"
+        merge --their "$b" "$temp" "$b_fmt" > "$diff_fmt"
     fi
 
-    merge --our "$old" "$old_fmt" "$cur" > "$temp"
+    merge --our "$a" "$a_fmt" "$b" > "$temp"
     if ! git diff -s "$diff_fmt" "$temp"; then
         echo "$diff_fmt"
     fi
 )
 
 git_diff () (
-    cur="$1"
-    new="$2"
+    b="$1"
+    diff_fmt="$2"
     filename="$3"
 
     [ "$gf_use_color" = 1 ] && color="--color" || color=
 
     # shellcheck disable=SC2086
-    git diff $color "$cur" "$new" | \
+    git diff $color "$b" "$diff_fmt" | \
         sed \
-            -e "s/$(sed_esc -p "a$cur")/$(sed_esc -s "a/$filename")/g" \
-            -e "s/$(sed_esc -p "b$new")/$(sed_esc -s "b/$filename")/g"
+            -e "s/$(sed_esc -p "a$b")/$(sed_esc -s "a/$filename")/g" \
+            -e "s/$(sed_esc -p "b$diff_fmt")/$(sed_esc -s "b/$filename")/g"
 )
 
 git_retrieve_file_from_sha () (
@@ -359,17 +359,17 @@ list_files () (
 process_file () (
     sha1="$1"
     sha2="$2"
-    old_name="$3"
-    cur_name="${4:-$old_name}"
+    a_name="$3"
+    b_name="${4:-$a_name}"
 
-    debug "--- PROCESSING: $cur_name ---"
+    debug "--- PROCESSING: $b_name ---"
     debug "args = " "$@"
 
-    case "$(git_conf_get "$cur_name" ignore)" in
+    case "$(git_conf_get "$b_name" ignore)" in
         true|1) return ;;
     esac
 
-    formatter="$(git_conf_get "$cur_name" formatter)"
+    formatter="$(git_conf_get "$b_name" formatter)"
     debug "formatter = $formatter"
 
     if [ -z "$formatter" ]; then
@@ -384,35 +384,35 @@ process_file () (
     tempdir="$(mktemp -d)"
     rm_list__push "$tempdir"
 
-    debug "$cur_name => $tempdir"
+    debug "$b_name => $tempdir"
 
-    cur="$tempdir"/cur
-    old="$tempdir"/old
-    cur_fmt="$tempdir"/cur_fmt
-    old_fmt="$tempdir"/old_fmt
+    b="$tempdir"/b
+    a="$tempdir"/a
+    b_fmt="$tempdir"/b_fmt
+    a_fmt="$tempdir"/a_fmt
 
-    git_retrieve_file_from_sha "$sha1" "" > "$old"
-    git_retrieve_file_from_sha "$sha2" "$cur_name" > "$cur"
-    rm_list__push "$old" "$cur"
+    git_retrieve_file_from_sha "$sha1" "" > "$a"
+    git_retrieve_file_from_sha "$sha2" "$b_name" > "$b"
+    rm_list__push "$a" "$b"
 
-    if [ ! -s "$cur" ]; then
-        warn "couldn't retrieve ${obj2:+$obj2:}$cur_name"
+    if [ ! -s "$b" ]; then
+        warn "couldn't retrieve ${obj2:+$obj2:}$b_name"
     fi
 
-    sh -c "$formatter" < "$cur" > "$cur_fmt" 2> /dev/null
-    rm_list__push "$cur_fmt"
+    sh -c "$formatter" < "$b" > "$b_fmt" 2> /dev/null
+    rm_list__push "$b_fmt"
 
-    if ! git diff -s "$cur" "$cur_fmt"; then
-        sh -c "$formatter" < "$old" > "$old_fmt" 2> /dev/null
-        rm_list__push "$old_fmt"
+    if ! git diff -s "$b" "$b_fmt"; then
+        sh -c "$formatter" < "$a" > "$a_fmt" 2> /dev/null
+        rm_list__push "$a_fmt"
 
         diff_fmt="$(git_changes_formatted \
             "$tempdir" \
-            "$cur" "$old" "$cur_fmt" "$old_fmt" \
+            "$b" "$a" "$b_fmt" "$a_fmt" \
         )"
 
         if [ -n "$diff_fmt" ]; then
-            git_diff "$cur" "$diff_fmt" "$cur_name"
+            git_diff "$b" "$diff_fmt" "$b_name"
         fi
     fi
 )
