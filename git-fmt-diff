@@ -3,6 +3,8 @@
 # SPDX-License-Identifier:  MIT
 # Copyright 2023 Jorengarenar
 
+# globals {{{
+
 gc_prog_name="fmt-diff"
 
 g_obj1=
@@ -16,6 +18,8 @@ g_cached_opt=
 gf_debug=
 gf_no_term=
 gf_use_color=
+
+# }}}
 
 # helpers {{{1
 
@@ -45,6 +49,16 @@ pat_list_to_case () (
     sed 's/\s\+/|/g'
 )
 
+rm_ () (
+    [ "$gf_debug" = 1 ] && return
+    if [ "$1" = "-d" ]; then
+        shift
+        rmdir "$@"
+    else
+        rm "$@"
+    fi
+)
+
 sed_esc () (
     if [ "$1" = "-p" ]; then
         printf '%s\n' "$2" | sed -e 's/[]\/$*.^[]/\\&/g'
@@ -52,6 +66,12 @@ sed_esc () (
         printf '%s\n' "$2" | sed -e 's/[\/&]/\\&/g'
     fi
 )
+
+setup_env () {
+    TMPDIR="${TMPDIR:-/tmp}"/git-"$gc_prog_name"
+    mkdir -p "$TMPDIR"
+    trap 'rm_ -d "$TMPDIR" 2> /dev/null' EXIT
+}
 
 warn () (
     >&2 printf "%s: " "$(basename "$0")"
@@ -254,30 +274,32 @@ git_changes_formatted () (
     old_fmt="$5"
 
     merge () { git merge-file -p "$@"; }
+    diff_fmt="$tempdir"/diff_fmt
     temp="$tempdir"/temp
 
     if git diff -s "$cur_fmt" "$old_fmt"; then
         merge --our "$cur" "$old" "$cur_fmt" > "$temp"
         merge "$cur" "$temp" "$cur_fmt"
-        [ "$gf_debug" != 1 ] && rm "$temp"
+        rm_ "$temp"
         return
     fi
 
-    fmtcng="$tempdir"/fmtcng
-    merge --their "$old" "$old_fmt" "$cur_fmt" > "$fmtcng"
+    merge --their "$old" "$old_fmt" "$cur_fmt" > "$diff_fmt"
 
-    merge --our "$fmtcng" "$old" "$cur" > "$temp"
-    if ! git diff -s "$fmtcng" "$temp"; then
-        merge --their "$cur" "$fmtcng" "$cur_fmt" > "$temp"
-        merge --their "$cur" "$temp" "$cur_fmt" > "$fmtcng"
+    merge --our "$diff_fmt" "$old" "$cur" > "$temp"
+    if ! git diff -s "$diff_fmt" "$temp"; then
+        merge --their "$cur" "$diff_fmt" "$cur_fmt" > "$temp"
+        merge --their "$cur" "$temp" "$cur_fmt" > "$diff_fmt"
     fi
 
     merge --our "$old" "$old_fmt" "$cur" > "$temp"
-    if ! git diff -s "$fmtcng" "$temp"; then
-        cat "$fmtcng"
+    if ! git diff -s "$diff_fmt" "$temp"; then
+        echo "$diff_fmt"
+    else
+        rm_ "$diff_fmt"
     fi
 
-    [ "$gf_debug" != 1 ] && rm "$fmtcng" "$temp"
+    rm_ "$temp"
 )
 
 git_diff () (
@@ -344,7 +366,6 @@ process_file () (
     old="$tempdir"/old
     cur_fmt="$tempdir"/cur_fmt
     old_fmt="$tempdir"/old_fmt
-    fmt="$tempdir"/fmt
 
     git_retrieve_file_from_obj "$obj1" "$old_name" > "$old"
     git_retrieve_file_from_obj "$obj2" "$cur_name" > "$cur"
@@ -357,20 +378,22 @@ process_file () (
     if ! git diff -s "$cur" "$cur_fmt"; then
         sh -c "$formatter" < "$old" > "$old_fmt" 2> /dev/null
 
-        git_changes_formatted "$tempdir" "$cur" "$old" "$cur_fmt" "$old_fmt" > "$fmt"
+        diff_fmt="$(git_changes_formatted \
+            "$tempdir" \
+            "$cur" "$old" "$cur_fmt" "$old_fmt" \
+        )"
 
-        if [ -s "$fmt" ]; then
-            git_diff "$cur" "$fmt" "$cur_name"
+        if [ -n "$diff_fmt" ]; then
+            git_diff "$cur" "$diff_fmt" "$cur_name"
+            rm_ "$diff_fmt"
         fi
 
-        [ "$gf_debug" != 1 ] && rm "$old_fmt" "$fmt"
+        rm_ "$old_fmt"
     fi
 
     debug "$cur_name => $tempdir"
-    if [ "$gf_debug" != 1 ]; then
-        rm "$old" "$cur" "$cur_fmt"
-        rmdir "$tempdir"
-    fi
+    rm_ "$old" "$cur" "$cur_fmt"
+    rm_ -d "$tempdir"
 )
 
 # running {{{1
@@ -475,6 +498,7 @@ main () (
     obj2="$2"
 
     outfile="$(mktemp)"
+    debug "OUTFILE: $outfile"
 
     files="$(list_files "$obj1" "$obj2")"
 
@@ -489,10 +513,11 @@ main () (
 
     sh -c "$(git_conf_get pager)" < "$outfile"
 
-    rm "$outfile"
+    rm_ "$outfile"
 )
 
 # }}}1
 
+setup_env
 parse_options "$@"
 main "$g_obj1" "$g_obj2"
