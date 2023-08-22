@@ -7,9 +7,6 @@
 
 gc_prog_name="fmt-diff"
 
-g_obj1=
-g_obj2=
-
 g_config=
 g_local_rc=
 
@@ -325,32 +322,48 @@ git_diff () (
             -e "s/$(sed_esc -p "b$new")/$(sed_esc -s "b/$filename")/g"
 )
 
-git_retrieve_file_from_obj () (
-    obj="$1"
+git_retrieve_file_from_sha () (
+    sha="$1"
     file="$2"
 
-    debug "obj = '$obj'"
+    debug "sha = '$sha'"
     debug "file = '$file'"
 
-    if [ -e "$file" ] && [ "$obj" = "$file" ]; then
-        cat "$file"
-    elif [ -n "$obj" ]; then
-        git show "$obj:$file" 2> /dev/null
-    elif [ -e "$file" ]; then
-        cat "$file"
+    if [ "$sha" -eq 0 ] 2> /dev/null; then
+        if [ -n "$file" ]; then
+            cat "$file"
+        else
+            printf ''
+        fi
+    else
+        git show "$sha" 2> /dev/null
     fi
 )
 
-process_file () (
-    obj1="$1"
-    obj2="$2"
-    line="$3"
+list_files () (
+    if ! git rev-parse --is-inside-work-tree 2> /dev/null 1>&2; then
+        [ -s "$1" ] && printf '0 0 %s\n' "$(abspath "$1")"
+        return
+    fi
 
-    old_name="$(echo "$line" | cut -f1)"
-    cur_name="$(echo "$line" | cut -f2)"
-    [ -z "$cur_name" ] && cur_name="$old_name"
+    if [ -e "$1" ] && ! git ls-files --error-unmatch "$1" 2> /dev/null 1>&2; then
+        printf '0 0 %s\n' "$(abspath "$1")"
+        return
+    fi
+
+    # shellcheck disable=SC2086
+    git diff $g_cached_opt --diff-filter=ARMC --raw "$@" | \
+        awk '{ print $3 " " $4 " " $6 " " $7 }'
+)
+
+process_file () (
+    sha1="$1"
+    sha2="$2"
+    old_name="$3"
+    cur_name="${4:-$old_name}"
 
     debug "--- PROCESSING: $cur_name ---"
+    debug "args = " "$@"
 
     case "$(git_conf_get "$cur_name" ignore)" in
         true|1) return ;;
@@ -378,8 +391,8 @@ process_file () (
     cur_fmt="$tempdir"/cur_fmt
     old_fmt="$tempdir"/old_fmt
 
-    git_retrieve_file_from_obj "$obj1" "$old_name" > "$old"
-    git_retrieve_file_from_obj "$obj2" "$cur_name" > "$cur"
+    git_retrieve_file_from_sha "$sha1" "" > "$old"
+    git_retrieve_file_from_sha "$sha2" "$cur_name" > "$cur"
     rm_list__push "$old" "$cur"
 
     if [ ! -s "$cur" ]; then
@@ -404,42 +417,48 @@ process_file () (
     fi
 )
 
-# running {{{1
+processing () (
+    outdir="$(mktemp -d)"
+    rm_list__push "$outdir"
+    debug "OUTDIR: $outdir"
 
-list_files () (
-    obj1="$1"
-    obj2="$2"
+    files="$(list_files "$@")"  # must be before 'cd $repo_root'
 
-    [ "$obj1" = "HEAD" ] && obj1=
+    repo_root="$(git rev-parse --show-toplevel 2> /dev/null)"
+    [ -n "$repo_root" ] && { cd "$repo_root" || exit 1; }
 
-    if ! git rev-parse --is-inside-work-tree 2> /dev/null 1>&2; then
-        [ -s "$obj1" ] && abspath "$obj1"
-        return
+    i=0
+    i_len="$(echo "$files" | wc -l | tr -d '\n' | wc -m)"
+    while read -r line; do
+        [ -z "$line" ] && continue
+
+        outfile="$(printf '%s/%.*d' "$outdir" "$i_len" "$i")"
+        rm_list__push "$outfile"
+
+        # shellcheck disable=SC2086
+        process_file $line > "$outfile" &
+
+        i=$((i+1))
+    done << EOL
+$files
+EOL
+
+    wait
+
+    if [ -n "$(ls -A "$outdir")" ]; then
+        cat "$outdir"/* | sh -c "$(git_conf_get pager)"
     fi
-
-    if [ -e "$obj1" ] && ! git ls-files --error-unmatch "$obj1" 2> /dev/null 1>&2; then
-        abspath "$obj1"
-        return
-    fi
-
-    # shellcheck disable=SC2086
-    git diff $g_cached_opt --diff-filter=ARMC --name-status $obj1 $obj2 | cut -f2-
 )
 
-setup_env () {
-    TMPDIR="${TMPDIR:-/tmp}"/git-"$gc_prog_name"
-    mkdir -p "$TMPDIR"
-    rm_list__push "$TMPDIR"
-
-    trap 'cleanup' EXIT
-}
+# start {{{1
 
 usage () (
     cat << EOU
 EOU
 )
 
-parse_options () {
+main () (
+    # parse options {{{2
     while :; do
         case "$1" in
             -h)
@@ -474,8 +493,6 @@ parse_options () {
                 gf_use_color=0
                 ;;
             --)
-                g_obj1="$2"
-                g_obj2="$3"
                 break
                 ;;
             -?*)
@@ -484,18 +501,20 @@ parse_options () {
                 exit 1
                 ;;
             *)
-                if [ -z "$1" ]; then
-                    break
-                elif [ -z "$g_obj1" ]; then
-                    g_obj1="$1"
-                elif [ -z "$g_obj2" ]; then
-                    g_obj2="$1"
-                else
-                    warn "ignored object: $1"
-                fi
+                break
+                ;;
         esac
 
         shift
+    done
+
+    for o in "$@"; do
+        case "$o" in
+            -?*)
+                warn "option '$o' must come before non-option arguments"
+                return 1
+                ;;
+        esac
     done
 
     [ -t 1 ] && gf_no_term=0 || gf_no_term=1
@@ -510,43 +529,18 @@ parse_options () {
     if [ -z "$gf_use_color" ] && [ "$gf_no_term" = 0 ]; then
         gf_use_color=1
     fi
-}
 
-main () (
-    obj1="${1:-HEAD}"
-    obj2="$2"
+    # setup env {{{2
+    TMPDIR="${TMPDIR:-/tmp}"/git-"$gc_prog_name"
+    mkdir -p "$TMPDIR"
+    rm_list__push "$TMPDIR"
 
-    outdir="$(mktemp -d)"
-    rm_list__push "$outdir"
-    debug "OUTDIR: $outdir"
+    trap 'cleanup' EXIT
+    # }}}2
 
-    files="$(list_files "$obj1" "$obj2")"  # must be before 'cd $repo_root'
-
-    repo_root="$(git rev-parse --show-toplevel 2> /dev/null)"
-    [ -n "$repo_root" ] && { cd "$repo_root" || exit 1; }
-
-    i=0
-    i_len="$(echo "$files" | wc -l | tr -d '\n' | wc -m)"
-    while read -r line; do
-        debug "$line"
-
-        [ -e "$obj1" ] && obj1="HEAD"
-        outfile="$(printf '%s/%.*d' "$outdir" "$i_len" "$i")"
-
-        process_file "$obj1" "$obj2" "$line" > "$outfile" &
-        rm_list__push "$outfile"
-
-        i=$((i+1))
-    done << EOL
-$files
-EOL
-
-    wait
-    cat "$outdir"/* | sh -c "$(git_conf_get pager)"
+    processing "$@"
 )
 
 # }}}1
 
-setup_env
-parse_options "$@"
-main "$g_obj1" "$g_obj2"
+main "$@"
