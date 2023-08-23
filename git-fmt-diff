@@ -275,51 +275,51 @@ detect_filetype () (
 
 git_changes_formatted () (
     tempdir="$1"
-    b="$2"
-    a="$3"
+    b_raw="$2"
+    a_raw="$3"
     b_fmt="$4"
     a_fmt="$5"
 
     merge () { git merge-file -p "$@"; }
-    diff_fmt="$tempdir"/diff_fmt
+    chng_fmt="$tempdir"/chng_fmt
     temp="$tempdir"/temp
 
     rm_list__push "$temp"
-    rm_list__push "$diff_fmt"
+    rm_list__push "$chng_fmt"
 
     if git diff -s "$b_fmt" "$a_fmt"; then
-        merge --our "$b" "$a" "$b_fmt" > "$temp"
-        merge "$b" "$temp" "$b_fmt" > "$diff_fmt"
-        echo "$diff_fmt"
+        merge --our "$b_raw" "$a_raw" "$b_fmt" > "$temp"
+        merge "$b_raw" "$temp" "$b_fmt" > "$chng_fmt"
+        echo "$chng_fmt"
         return
     fi
 
-    merge --their "$a" "$a_fmt" "$b_fmt" > "$diff_fmt"
+    merge --their "$a_raw" "$a_fmt" "$b_fmt" > "$chng_fmt"
 
-    merge --our "$diff_fmt" "$a" "$b" > "$temp"
-    if ! git diff -s "$diff_fmt" "$temp"; then
-        merge --their "$b" "$diff_fmt" "$b_fmt" > "$temp"
-        merge --their "$b" "$temp" "$b_fmt" > "$diff_fmt"
+    merge --our "$chng_fmt" "$a_raw" "$b_raw" > "$temp"
+    if ! git diff -s "$chng_fmt" "$temp"; then
+        merge --their "$b_raw" "$chng_fmt" "$b_fmt" > "$temp"
+        merge --their "$b_raw" "$temp" "$b_fmt" > "$chng_fmt"
     fi
 
-    merge --our "$a" "$a_fmt" "$b" > "$temp"
-    if ! git diff -s "$diff_fmt" "$temp"; then
-        echo "$diff_fmt"
+    merge --our "$a_raw" "$a_fmt" "$b_raw" > "$temp"
+    if ! git diff -s "$chng_fmt" "$temp"; then
+        echo "$chng_fmt"
     fi
 )
 
 git_diff () (
-    b="$1"
-    diff_fmt="$2"
+    b_raw="$1"
+    chng_fmt="$2"
     filename="$3"
 
     [ "$gf_use_color" = 1 ] && color="--color" || color=
 
     # shellcheck disable=SC2086
-    git diff $color "$b" "$diff_fmt" | \
+    git diff $color "$b_raw" "$chng_fmt" | \
         sed \
-            -e "s/$(sed_esc -p "a$b")/$(sed_esc -s "a/$filename")/g" \
-            -e "s/$(sed_esc -p "b$diff_fmt")/$(sed_esc -s "b/$filename")/g"
+            -e "s/$(sed_esc -p "a$b_raw")/$(sed_esc -s "a/$filename")/g" \
+            -e "s/$(sed_esc -p "b$chng_fmt")/$(sed_esc -s "b/$filename")/g"
 )
 
 git_retrieve_file_from_sha () (
@@ -357,8 +357,8 @@ list_files () (
 )
 
 process_file () (
-    sha1="$1"
-    sha2="$2"
+    a_hash="$1"
+    b_hash="$2"
     a_name="$3"
     b_name="${4:-$a_name}"
 
@@ -386,33 +386,34 @@ process_file () (
 
     debug "$b_name => $tempdir"
 
-    b="$tempdir"/b
-    a="$tempdir"/a
+    b_raw="$tempdir"/b_raw
+    a_raw="$tempdir"/a_raw
     b_fmt="$tempdir"/b_fmt
     a_fmt="$tempdir"/a_fmt
 
-    git_retrieve_file_from_sha "$sha1" "" > "$a"
-    git_retrieve_file_from_sha "$sha2" "$b_name" > "$b"
-    rm_list__push "$a" "$b"
+    git_retrieve_file_from_sha "$a_hash" "" > "$a_raw"
+    git_retrieve_file_from_sha "$b_hash" "$b_name" > "$b_raw"
+    rm_list__push "$a_raw" "$b_raw"
 
-    if [ ! -s "$b" ]; then
-        warn "couldn't retrieve ${obj2:+$obj2:}$b_name"
+    if [ ! -s "$b_raw" ]; then
+        warn "couldn't retrieve $b_name"
     fi
 
-    sh -c "$formatter" < "$b" > "$b_fmt" 2> /dev/null
+    sh -c "$formatter" < "$b_raw" > "$b_fmt" 2> /dev/null
     rm_list__push "$b_fmt"
 
-    if ! git diff -s "$b" "$b_fmt"; then
-        sh -c "$formatter" < "$a" > "$a_fmt" 2> /dev/null
+    if ! git diff -s "$b_raw" "$b_fmt"; then
+        sh -c "$formatter" < "$a_raw" > "$a_fmt" 2> /dev/null
         rm_list__push "$a_fmt"
 
-        diff_fmt="$(git_changes_formatted \
+        chng_fmt="$(git_changes_formatted \
             "$tempdir" \
-            "$b" "$a" "$b_fmt" "$a_fmt" \
+            "$b_raw" "$a_raw" \
+            "$b_fmt" "$a_fmt" \
         )"
 
-        if [ -n "$diff_fmt" ]; then
-            git_diff "$b" "$diff_fmt" "$b_name"
+        if [ -n "$chng_fmt" ]; then
+            git_diff "$b_raw" "$chng_fmt" "$b_name"
         fi
     fi
 )
