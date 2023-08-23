@@ -455,6 +455,19 @@ EOL
 
 usage () (
     cat << EOU
+usage: git fmt-diff [<options>] [<commit>] [--] [<path>...]
+   or: git fmt-diff [<options>] --cached [<commit>] [--] [<path>...]
+   or: git fmt-diff [<options>] <commit>...<commit> [--] [<path>...]
+   or: git fmt-diff [<options>] <blob> <blob>
+
+options:
+  -h               display this help and exit
+  --cached         view the changes you staged for the next commit relative
+                   to the named <commit> (which defaults to HEAD)
+  --staged         a synonym of --cached
+  --color          always show colors
+  --no-color       turn off colored diff
+  --config <file>  read config from specified file rather than \$GIT_DIR/.git-$gc_prog_name
 EOU
 )
 
@@ -466,10 +479,6 @@ main () (
                 usage
                 exit
                 ;;
-            --help)
-                man "$0"
-                exit
-                ;;
             --cached|--staged)
                 g_cached_opt="--cached"
                 ;;
@@ -479,7 +488,7 @@ main () (
             --debug=*)
                 gf_debug="${1#--debug=}"
                 ;;
-            -c|--config)
+            --config)
                 g_config="$2"
                 if [ -z "$g_config" ]; then
                     warn "option 'config' requires a path to config file as argument"
@@ -494,6 +503,7 @@ main () (
                 gf_use_color=0
                 ;;
             --)
+                shift
                 break
                 ;;
             -?*)
