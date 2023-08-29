@@ -21,13 +21,15 @@ usage: git fmt-diff [<options>] [<commit>] [--] [<path>...]
    or: git fmt-diff [<options>] <blob> <blob>
 
 options:
-  -h               display this help and exit
-  --cached         view the changes you staged for the next commit relative to
-                   the named <commit> (which, if not provided, defaults to HEAD)
-  --staged         a synonym of --cached
-  --color          always show colors
-  --no-color       turn off colored diff
-  --config <file>  read config from specified file rather than $GIT_DIR/.git-fmt-diff
+  -h                   display this help and exit
+  --cached             view the changes you staged for the next commit relative
+                       to the named <commit> (which defaults to HEAD)
+  --staged             a synonym of --cached
+  --color              always show colors
+  --no-color           turn off colored diff
+  --config <file>      read config from specified file rather than \$GIT_DIR/.git-$gc_prog_name
+  --warn-risky-stderr  redirects warning about potential unsolicited changes in suggestions to stderr;
+                       option not recommended as the warning blocks dangerous 'git apply'
 ```
 
 ## Installation
