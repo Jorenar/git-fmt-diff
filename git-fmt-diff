@@ -15,6 +15,7 @@ g_cached_opt=
 gf_debug=0
 gf_no_term=
 gf_use_color=
+gf_warn_risky_stderr=
 
 g_rm_list="$(mktemp)"
 
@@ -79,6 +80,14 @@ sed_esc () (
         printf '%s\n' "$2" | sed -e 's/[\/&]/\\&/g'
     fi
 )
+
+sgr () {
+    if [ "$gf_use_color" -eq 1 ]; then
+        printf "\033[%sm%s\033[0m" "$1" "$2"
+    else
+        printf '%s' "$2"
+    fi
+}
 
 warn () (
     >&2 printf "%s: " "$(basename "$0")"
@@ -275,10 +284,12 @@ detect_filetype () (
 
 git_changes_formatted () (
     tempdir="$1"
-    b_raw="$2"
-    a_raw="$3"
-    b_fmt="$4"
-    a_fmt="$5"
+    formatter="$2"
+
+    b_raw="$3"
+    a_raw="$4"
+    b_fmt="$5"
+    a_fmt="$6"
 
     merge () { git merge-file -p "$@"; }
     chng_fmt="$tempdir"/chng_fmt
@@ -306,6 +317,11 @@ git_changes_formatted () (
     if ! git diff -s "$chng_fmt" "$temp"; then
         echo "$chng_fmt"
     fi
+
+    sh -c "$formatter" < "$chng_fmt" > "$temp" 2> /dev/null
+    if ! git diff -s "$b_fmt" "$temp"; then
+        return 1
+    fi
 )
 
 git_diff () (
@@ -313,13 +329,18 @@ git_diff () (
     chng_fmt="$2"
     filename="$3"
 
-    [ "$gf_use_color" = 1 ] && color="--color" || color=
+    case "$filename" in
+        /*) ;;
+        *) a_filename="a/$a_filename" ;;
+    esac
+
+    [ "$gf_use_color" -eq 1 ] && color="--color" || color=
 
     # shellcheck disable=SC2086
     git diff $color "$b_raw" "$chng_fmt" | \
         sed \
-            -e "s/$(sed_esc -p "a$b_raw")/$(sed_esc -s "a/$filename")/g" \
-            -e "s/$(sed_esc -p "b$chng_fmt")/$(sed_esc -s "b/$filename")/g"
+            -e "s/$(sed_esc -p "a$b_raw")/$(sed_esc -s "$filename")/g" \
+            -e "s/$(sed_esc -p "b$chng_fmt")/$(sed_esc -s "$filename")/g"
 )
 
 git_retrieve_file_from_sha () (
@@ -357,10 +378,12 @@ list_files () (
 )
 
 process_file () (
-    a_hash="$1"
-    b_hash="$2"
-    a_name="$3"
-    b_name="${4:-$a_name}"
+    risky="$1"
+
+    a_hash="$2"
+    b_hash="$3"
+    a_name="$4"
+    b_name="${5:-$a_name}"
 
     debug "--- PROCESSING: $b_name ---"
     debug "args = " "$@"
@@ -396,26 +419,29 @@ process_file () (
     rm_list__push "$a_raw" "$b_raw"
 
     if [ ! -s "$b_raw" ]; then
-        warn "couldn't retrieve $b_name"
+        warn "couldn't retrieve '$b_name'"
+        return
     fi
 
     sh -c "$formatter" < "$b_raw" > "$b_fmt" 2> /dev/null
     rm_list__push "$b_fmt"
 
-    if ! git diff -s "$b_raw" "$b_fmt"; then
-        sh -c "$formatter" < "$a_raw" > "$a_fmt" 2> /dev/null
-        rm_list__push "$a_fmt"
+    git diff -s "$b_raw" "$b_fmt" && return
 
-        chng_fmt="$(git_changes_formatted \
-            "$tempdir" \
-            "$b_raw" "$a_raw" \
-            "$b_fmt" "$a_fmt" \
-        )"
+    sh -c "$formatter" < "$a_raw" > "$a_fmt" 2> /dev/null
+    rm_list__push "$a_fmt"
 
-        if [ -n "$chng_fmt" ]; then
-            git_diff "$b_raw" "$chng_fmt" "$b_name"
-        fi
-    fi
+    chng_fmt="$(git_changes_formatted \
+        "$tempdir" "$formatter"\
+        "$b_raw" "$a_raw" \
+        "$b_fmt" "$a_fmt" \
+    )"
+    ret="$?"
+
+    [ -z "$chng_fmt" ] && return
+
+    [ "$ret" -ne 0 ] && echo "$b_name" >> "$risky"
+    git_diff "$b_raw" "$chng_fmt" "$b_name"
 )
 
 processing () (
@@ -428,7 +454,11 @@ processing () (
     repo_root="$(git rev-parse --show-toplevel 2> /dev/null)"
     [ -n "$repo_root" ] && { cd "$repo_root" || exit 1; }
 
-    i=0
+    risky="$outdir"/0
+    touch "$risky"
+    rm_list__push "$risky"
+
+    i=1
     i_len="$(echo "$files" | wc -l | tr -d '\n' | wc -m)"
     while read -r line; do
         [ -z "$line" ] && continue
@@ -437,7 +467,7 @@ processing () (
         rm_list__push "$outfile"
 
         # shellcheck disable=SC2086
-        process_file $line > "$outfile" &
+        process_file "$risky" $line > "$outfile" &
 
         i=$((i+1))
     done << EOL
@@ -446,12 +476,29 @@ EOL
 
     wait
 
+    if [ -s "$risky" ]; then
+        cat > "$risky".temp << EOW
+$(sgr 33 '@ WARNING!')
+$(sgr 33 '@ Suggestions for the following files might smuggle unsolicited changes:')
+$(sort "$risky" | sed 's/^/-  /')
+$(sgr 33 "@ Review them thoroughly before applying.")
+
+
+EOW
+        mv "$risky".temp "$risky"
+
+        if [ "$gf_warn_risky_stderr" -eq 1 ]; then
+            cat "$risky" 1>&2
+            true > "$risky"
+        fi
+    fi
+
     if [ -n "$(ls -A "$outdir")" ]; then
         cat "$outdir"/* | sh -c "$(git_conf_get pager)"
     fi
 )
 
-# start {{{1
+# }}}1
 
 usage () (
     cat << EOU
@@ -461,97 +508,95 @@ usage: git fmt-diff [<options>] [<commit>] [--] [<path>...]
    or: git fmt-diff [<options>] <blob> <blob>
 
 options:
-  -h               display this help and exit
-  --cached         view the changes you staged for the next commit relative
-                   to the named <commit> (which defaults to HEAD)
-  --staged         a synonym of --cached
-  --color          always show colors
-  --no-color       turn off colored diff
-  --config <file>  read config from specified file rather than \$GIT_DIR/.git-$gc_prog_name
+  -h                   display this help and exit
+  --cached             view the changes you staged for the next commit relative
+                       to the named <commit> (which defaults to HEAD)
+  --staged             a synonym of --cached
+  --color              always show colors
+  --no-color           turn off colored diff
+  --config <file>      read config from specified file rather than \$GIT_DIR/.git-$gc_prog_name
+  --warn-risky-stderr  redirects warning about potential unsolicited changes in suggestions to stderr;
+                       option not recommended as the warning blocks dangerous 'git apply'
 EOU
 )
 
-main () (
-    # parse options {{{2
-    while :; do
-        case "$1" in
-            -h)
-                usage
-                exit
-                ;;
-            --cached|--staged)
-                g_cached_opt="--cached"
-                ;;
-            --debug)
-                gf_debug=1
-                ;;
-            --debug=*)
-                gf_debug="${1#--debug=}"
-                ;;
-            --config)
-                g_config="$2"
-                if [ -z "$g_config" ]; then
-                    warn "option 'config' requires a path to config file as argument"
-                    exit 1
-                fi
-                shift
-                ;;
-            --color)
-                gf_use_color=1
-                ;;
-            --no-color)
-                gf_use_color=0
-                ;;
-            --)
-                shift
-                break
-                ;;
-            -?*)
-                warn "unknown option: $1"
-                usage
+# parse options {{{2
+while :; do
+    case "$1" in
+        -h)
+            usage
+            exit
+            ;;
+        --cached|--staged)
+            g_cached_opt="--cached"
+            ;;
+        --debug)
+            gf_debug=1
+            ;;
+        --debug=*)
+            gf_debug="${1#--debug=}"
+            ;;
+        --config)
+            g_config="$2"
+            if [ -z "$g_config" ]; then
+                warn "option 'config' requires a path to config file as argument"
                 exit 1
-                ;;
-            *)
-                break
-                ;;
-        esac
+            fi
+            shift
+            ;;
+        --color)
+            gf_use_color=1
+            ;;
+        --no-color)
+            gf_use_color=0
+            ;;
+        --warn-risky-stderr)
+            gf_warn_risky_stderr=1
+            ;;
+        --)
+            shift
+            break
+            ;;
+        -?*)
+            warn "unknown option: $1"
+            usage
+            exit 1
+            ;;
+        *)
+            break
+            ;;
+    esac
 
-        shift
-    done
+    shift
+done
 
-    for o in "$@"; do
-        case "$o" in
-            -?*)
-                warn "option '$o' must come before non-option arguments"
-                return 1
-                ;;
-        esac
-    done
+for o in "$@"; do
+    case "$o" in
+        -?*)
+            warn "option '$o' must come before non-option arguments"
+            return 1
+            ;;
+    esac
+done
 
-    [ -t 1 ] && gf_no_term=0 || gf_no_term=1
+[ -t 1 ] && gf_no_term=0 || gf_no_term=1
+[ -z "$gf_warn_risky_stderr" ] && gf_warn_risky_stderr=0
+[ -z "$gf_use_color" ] && [ "$gf_no_term" = 0 ] && gf_use_color=1
+[ -z "$gf_use_color" ] && gf_use_color=0
 
-    repo_root="$(git rev-parse --show-toplevel 2> /dev/null)"
-    if [ -z "$g_config" ] && [ -n "$repo_root" ]; then
-        if [ -e "$repo_root/.git-$gc_prog_name" ]; then
-            g_local_rc="$repo_root/.git-$gc_prog_name"
-        fi
+repo_root="$(git rev-parse --show-toplevel 2> /dev/null)"
+if [ -z "$g_config" ] && [ -n "$repo_root" ]; then
+    if [ -e "$repo_root/.git-$gc_prog_name" ]; then
+        g_local_rc="$repo_root/.git-$gc_prog_name"
     fi
+fi
 
-    if [ -z "$gf_use_color" ] && [ "$gf_no_term" = 0 ]; then
-        gf_use_color=1
-    fi
+# setup env {{{2
+TMPDIR="${TMPDIR:-/tmp}"/git-"$gc_prog_name"
+mkdir -p "$TMPDIR"
+rm_list__push "$TMPDIR"
 
-    # setup env {{{2
-    TMPDIR="${TMPDIR:-/tmp}"/git-"$gc_prog_name"
-    mkdir -p "$TMPDIR"
-    rm_list__push "$TMPDIR"
+trap 'cleanup' EXIT
+# }}}2
 
-    trap 'cleanup' EXIT
-    # }}}2
-
-    processing "$@"
-)
-
-# }}}1
-
-main "$@"
+processing "$@"
