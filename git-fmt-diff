@@ -7,9 +7,6 @@
 
 gc_prog_name="fmt-diff"
 
-g_config=
-g_local_rc=
-
 g_cached_opt=
 
 gf_debug=0
@@ -98,35 +95,12 @@ warn () (
 
 # git config --get {{{1
 
-# shellcheck disable=SC2142,SC2154
-alias _git_conf_get__prep_conf_file_arg_='conf="$1"; [ -n "$conf" ] && conf="--file \"$conf\""; shift'
-
-git_conf_get__call_ () (
-    getter="$1"
-    shift
-
-    val=
-
-    if [ -n "$g_local_rc" ]; then
-        val="$($getter "$g_local_rc" "$@")"
-    fi
-
-    if [ -z "$val" ]; then
-        val="$($getter "$g_config" "$@")"
-    fi
-
-    echo "$val"
-)
-
-_git_conf_get__cb__ft_map () (
-    _git_conf_get__prep_conf_file_arg_
-
+_git_conf_get__ft_map () (
     file="$1"
 
     debug "args =" "$@"
 
-    # shellcheck disable=SC2086,SC2154
-    git config $conf --get-regexp "$gc_prog_name"'\.map-' | while read -r line; do
+    git config --get-regexp "$gc_prog_name"'\.map-' | while read -r line; do
         debug "line = $line"
         line="$(echo "$line" | awk -F'--' '{print $2}')"
         ft="$(echo "$line" | cut -d' ' -f1)"
@@ -142,9 +116,7 @@ _git_conf_get__cb__ft_map () (
     done
 )
 
-_git_conf_get__cb__section_glob () (
-    _git_conf_get__prep_conf_file_arg_
-
+_git_conf_get__glob__var () (
     debug "args =" "$@"
 
     file="$1"
@@ -152,7 +124,6 @@ _git_conf_get__cb__section_glob () (
 
     val=
 
-    # shellcheck disable=SC2086
     while read -r line; do
         debug "line = $line"
         opt="$(echo "$line" | cut -d' ' -f1)"
@@ -161,40 +132,32 @@ _git_conf_get__cb__section_glob () (
             $opt) val="$(echo "$line" | cut -d' ' -f2-)" ;;
         esac
     done << EOF
-$(git config $conf --get-regexp "$gc_prog_name"'\.[^=].*\.'"$var"'$')
+$(git config --get-regexp "$gc_prog_name"'\.[^=].*\.'"$var"'$')
 EOF
 
     echo "$val"
 )
 
-_git_conf_get__cb__simple () (
-    _git_conf_get__prep_conf_file_arg_
-    debug "args =" "$@"
-    # shellcheck disable=SC2086
-    git config $conf --get "$@"
-)
-
-
-git_conf_get__ft_formatter () (
+_git_conf_get__ft_formatter () (
     file="$1"
     ft="$2"
 
     debug "args =" "$@"
 
-    fmt="$(git_conf_get__call_ _git_conf_get__cb__section_glob "$file" "formatter-$ft")"
+    fmt="$(_git_conf_get__glob__var "$file" "formatter-$ft")"
 
     if [ -z "$fmt" ]; then
-        fmt="$(git_conf_get__call_ _git_conf_get__cb__simple "$gc_prog_name.=$ft.formatter")"
+        fmt="$(_git_conf_get__var "$gc_prog_name.=$ft.formatter")"
     fi
 
     if [ -z "$fmt" ]; then
-        fmt="$(git_conf_get__call_ _git_conf_get__cb__simple "$gc_prog_name.formatter-$ft")"
+        fmt="$(_git_conf_get__var "$gc_prog_name.formatter-$ft")"
     fi
 
     echo "$fmt"
 )
 
-git_conf_get__pager () (
+_git_conf_get__pager () (
     if [ "$gf_no_term" = 1 ]; then
         echo "cat"
         return
@@ -211,23 +174,28 @@ git_conf_get__pager () (
     echo "$pgr"
 )
 
+_git_conf_get__var () (
+    debug "args =" "$@"
+    # shellcheck disable=SC2086
+    git config $conf --get "$@"
+)
 
 git_conf_get () (
     if [ "$1" = "pager" ]; then
-        git_conf_get__pager
+        _git_conf_get__pager
         return
     elif [ -z "$2" ]; then
-        git_conf_get__call_ _git_conf_get__cb__simple "$1"
+        _git_conf_get__var "$1"
         return
     fi
 
     file="$1"
     var="$2"
 
-    val=$(git_conf_get__call_ _git_conf_get__cb__section_glob "$file" "$var")
+    val=$(_git_conf_get__glob__var "$file" "$var")
 
     if [ -z "$val" ] && [ "$var" = "filetype" ]; then
-        val="$(git_conf_get__call_ _git_conf_get__cb__ft_map "$file")"
+        val="$(_git_conf_get__ft_map "$file")"
         [ -z "$val" ] && return 1
     fi
 
@@ -237,21 +205,21 @@ git_conf_get () (
             debug "var = $var"
             case "$var" in
                 formatter)
-                    val="$(git_conf_get__ft_formatter "$file" "$ft")"
+                    val="$(_git_conf_get__ft_formatter "$file" "$ft")"
                     ;;
                 *)
-                    val="$(git_conf_get__call_ _git_conf_get__cb__simple "$gc_prog_name.=$ft.$var")"
+                    val="$(_git_conf_get__var "$gc_prog_name.=$ft.$var")"
                     ;;
             esac
         fi
     fi
 
     if [ -z "$val" ] && [ "$var" = "formatter" ]; then
-        val="$(git_conf_get__call_ _git_conf_get__cb__simple "$gc_prog_name"."$var")"
+        val="$(_git_conf_get__var "$gc_prog_name"."$var")"
     fi
 
     if [ -z "$val" ] && [ "$var" = "ignore" ]; then
-        list="$(git_conf_get__call_ _git_conf_get__cb__simple "$gc_prog_name"."$var")"
+        list="$(_git_conf_get__var "$gc_prog_name"."$var")"
         if [ -n "$list" ]; then
             list="$(echo "$list" | pat_list_to_case)"
             # shellcheck disable=SC2254
@@ -514,7 +482,6 @@ options:
   --staged             a synonym of --cached
   --color              always show colors
   --no-color           turn off colored diff
-  --config <file>      read config from specified file rather than \$GIT_DIR/.git-$gc_prog_name
   --warn-risky-stderr  redirects warning about potential unsolicited changes in suggestions to stderr;
                        option not recommended as the warning blocks dangerous 'git apply'
 EOU
@@ -535,14 +502,6 @@ while :; do
             ;;
         --debug=*)
             gf_debug="${1#--debug=}"
-            ;;
-        --config)
-            g_config="$2"
-            if [ -z "$g_config" ]; then
-                warn "option 'config' requires a path to config file as argument"
-                exit 1
-            fi
-            shift
             ;;
         --color)
             gf_use_color=1
@@ -585,11 +544,6 @@ done
 [ -z "$gf_use_color" ] && gf_use_color=0
 
 repo_root="$(git rev-parse --show-toplevel 2> /dev/null)"
-if [ -z "$g_config" ] && [ -n "$repo_root" ]; then
-    if [ -e "$repo_root/.git-$gc_prog_name" ]; then
-        g_local_rc="$repo_root/.git-$gc_prog_name"
-    fi
-fi
 
 # setup env {{{2
 TMPDIR="${TMPDIR:-/tmp}"/git-"$gc_prog_name"

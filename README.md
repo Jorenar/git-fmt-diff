@@ -27,7 +27,6 @@ options:
   --staged             a synonym of --cached
   --color              always show colors
   --no-color           turn off colored diff
-  --config <file>      read config from specified file rather than \$GIT_DIR/.git-$gc_prog_name
   --warn-risky-stderr  redirects warning about potential unsolicited changes in suggestions to stderr;
                        option not recommended as the warning blocks dangerous 'git apply'
 ```
