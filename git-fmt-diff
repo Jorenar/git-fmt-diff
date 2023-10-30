@@ -396,13 +396,12 @@ process_file () (
     fi
 
     # shellcheck disable=SC2086
-    sh -c "$formatter" < "$b_raw" > "$b_fmt" $g_fmtprg_devnull
+    eval "sh -c '$formatter' < '$b_raw' > '$b_fmt' $g_fmtprg_devnull"
     rm_list__push "$b_fmt"
 
     git diff -s "$b_raw" "$b_fmt" && return
 
-    # shellcheck disable=SC2086
-    sh -c "$formatter" < "$a_raw" > "$a_fmt" $g_fmtprg_devnull
+    eval "sh -c '$formatter' < '$a_raw' > '$a_fmt' $g_fmtprg_devnull"
     rm_list__push "$a_fmt"
 
     chng_fmt="$(git_changes_formatted \
