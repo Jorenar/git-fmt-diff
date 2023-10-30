@@ -5,7 +5,7 @@ Show how lines you changed would look formatted
 
 ## Dependencies
 
-* POSIX compatible shell (e.g. Bash)
+* POSIX compatible shell (e.g. [Dash](http://gondor.apana.org.au/~herbert/dash/), [Bash](https://www.gnu.org/software/bash/))
 * [Git](https://git-scm.com/)
 * [Vim](https://www.vim.org/) _(optional)_ - for config-less filetype detection
 * a formatter program of your choice
@@ -35,8 +35,53 @@ options:
 
 1. Download [git-fmt-diff](https://raw.githubusercontent.com/Jorengarenar/git-fmt-diff/master/git-fmt-diff) file
 2. Set it as executable: `$ chmod +x git-fmt-diff`
-3. Put it into any direcory listed in `$PATH` variable
+3. Put it into any directory listed in `$PATH` variable
 
 ## Configuration
 
-TODO
+Configuration follows the rest of Git configuration, example `~/.gitconfig`:
+```gitconfig
+# ... [user], [init] etc. ...
+
+[fmt-diff]
+    formatter-c = uncrustify -l C -c .uncrustify.cfg
+    map-cpp = *.ipp, *.pp
+    ignore = site-packages/*, *.sh
+
+[fmt-diff "=python"]
+    ignore = true
+
+[fmt-diff "=go"]
+    formatter = gofmt
+
+[fmt-diff "tests/*"]
+    ignore = true
+
+[fmt-diff "extern/*"]
+    ignore = true
+
+[fmt-diff "extern/lib/*.c"]
+    ignore = false
+    formatter = astyle ...
+
+[fmt-diff "extern/cpp_lib/*.h"]
+    ignore = false
+    filetype = cpp
+
+# ... [alias], [include] etc. ...
+```
+
+* `[fmt-diff]` - general section
+  * `formatter-filetype` - formatter command for files with type `filetype`
+  * `map-filetype` - comma separated list of glob patterns to map files to `filetype`
+  * `ignore` - comma separated list of globs to ignore
+* `[fmt-diff "=filetype"]` - configuration for `filetype`
+  * `formatter` - format command for this filetype
+  * `ignore` - ignore formatting for this filetype (values: `true` or `false`)
+* `[fmt-diff "path/to/*/smt/*"]` - configuration for files under glob
+  * `filetype` - map files matching glob to this filetype
+  * `formatter` - format command for files matching this glob
+  * `ignore` - ignore formatting for files matching glob (values: `true` or `false`)
+
+Your formatter command needs to read from stdio and write to stdout.  
+That implies command needing to be filename agnostic!
