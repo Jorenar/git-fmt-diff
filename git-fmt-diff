@@ -49,6 +49,7 @@ cleanup () {
     done
 }
 
+# When debugging, make sure 'sh' is a link to Bash executable
 debug () (
     [ "$3" != "--" ] && [ "$gf_debug" -eq 0 ] && return
     prg="$(basename "$0")"
