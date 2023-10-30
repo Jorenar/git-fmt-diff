@@ -1,6 +1,10 @@
 `git fmt-diff`
 ==============
 
+[![CodeFactor](https://www.codefactor.io/repository/github/jorengarenar/git-fmt-diff/badge)](https://www.codefactor.io/repository/github/jorengarenar/git-fmt-diff)
+[![Codacy Badge](https://app.codacy.com/project/badge/Grade/668fa22e10dc4e029075604acc80cd08)](https://app.codacy.com/gh/Jorengarenar/git-fmt-diff/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+[![AUR version](https://img.shields.io/aur/version/git-fmt-diff)](https://aur.archlinux.org/packages/git-fmt-diff)
+
 You inherited a huge codebase with thousands of commits?  
 And it's an ugly mess? Now you cannot just reformat all those files?  
 But you want to have future changes adhering to some sane style?  
