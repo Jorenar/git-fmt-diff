@@ -1,7 +1,14 @@
 `git fmt-diff`
 ==============
 
-Show how lines you changed would look formatted
+You inherited a huge codebase with thousands of commits?  
+And it's an ugly mess? Now you cannot just reformat all those files?  
+But you want to have future changes adhering to some sane style?  
+Well, your formatter surely has some Git integration... it doesn't?  
+In that case, you are in the right place!  
+
+`git fmt-diff` shows how you could reformat just the lines touched in git commits;  
+similarly to tools like [git-clang-format](https://clang.llvm.org/docs/ClangFormat.html#git-integration), but formatter agnostic.
 
 ## Dependencies
 
@@ -62,7 +69,7 @@ Configuration follows the rest of Git configuration, example `~/.gitconfig`:
 
 [fmt-diff "extern/lib/*.c"]
     ignore = false
-    formatter = astyle ...
+    formatter = astyle --indent=tab
 
 [fmt-diff "extern/cpp_lib/*.h"]
     ignore = false
