@@ -65,10 +65,6 @@ pat_list_to_case () {
 
 rm_list__push () {
     [ "$gf_debug" -eq 2 ] && return
-    if [ -z "$g_rm_list" ]; then
-        g_rm_list="$(mktemp)"
-        rm_list__push "$g_rm_list"
-    fi
     for f in "$@"; do
         echo "$f" >> "$g_rm_list"
     done
@@ -559,7 +555,9 @@ repo_root="$(git rev-parse --show-toplevel 2> /dev/null)"
 # setup env {{{2
 TMPDIR="${TMPDIR:-/tmp}"/git-"$gc_prog_name"
 mkdir -p "$TMPDIR"
+g_rm_list="$(mktemp)"
 rm_list__push "$TMPDIR"
+rm_list__push "$g_rm_list"
 
 trap 'cleanup' EXIT
 # }}}2
