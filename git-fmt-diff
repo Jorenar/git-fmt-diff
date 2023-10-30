@@ -13,15 +13,16 @@ gf_debug=0
 gf_no_term=
 gf_use_color=
 gf_warn_risky_stderr=
+
 g_fmtprg_devnull="2> /dev/null"
 
-g_rm_list="$(mktemp)"
+g_rm_list=""
 
 # }}}
 
 # helpers {{{1
 
-abspath () (
+abspath () {
     if [ -d "$1" ]; then
         cd "$1" && pwd
     elif [ -f "$1" ]; then
@@ -33,9 +34,9 @@ abspath () (
     else
         warn "no such file or directory"
     fi
-)
+}
 
-cleanup () (
+cleanup () {
     sed '1!G;h;$!d' "$g_rm_list" | while read -r path; do
         if [ -d "$path" ]; then
             for f in "$path"/*; do
@@ -46,7 +47,7 @@ cleanup () (
             rm "$path"
         fi
     done
-)
+}
 
 debug () (
     [ "$3" != "--" ] && [ "$gf_debug" -eq 0 ] && return
@@ -57,11 +58,11 @@ debug () (
 )
 alias debug='debug "$FUNCNAME" "$LINENO"'
 
-pat_list_to_case () (
+pat_list_to_case () {
     sed 's/\s*,\s*/|/g'
-)
+}
 
-rm_list__push () (
+rm_list__push () {
     [ "$gf_debug" -eq 2 ] && return
     if [ -z "$g_rm_list" ]; then
         g_rm_list="$(mktemp)"
@@ -70,15 +71,15 @@ rm_list__push () (
     for f in "$@"; do
         echo "$f" >> "$g_rm_list"
     done
-)
+}
 
-sed_esc () (
+sed_esc () {
     if [ "$1" = "-p" ]; then
         printf '%s\n' "$2" | sed -e 's/[]\/$*.^[]/\\&/g'
     elif [ "$1" = "-s" ]; then
         printf '%s\n' "$2" | sed -e 's/[\/&]/\\&/g'
     fi
-)
+}
 
 sgr () {
     if [ "$gf_use_color" -eq 1 ]; then
@@ -88,12 +89,12 @@ sgr () {
     fi
 }
 
-warn () (
+warn () {
     >&2 printf "%s: " "$(basename "$0")"
     # printf "\033[30m\033[103m"
     >&2 echo "$@"
     # printf "\033[0m"
-)
+}
 
 # git config --get {{{1
 
@@ -473,7 +474,7 @@ EOW
 
 # }}}1
 
-usage () (
+usage () {
     cat << EOU
 usage: git fmt-diff [<options>] [<commit>] [--] [<path>...]
    or: git fmt-diff [<options>] --cached [<commit>] [--] [<path>...]
@@ -491,7 +492,7 @@ options:
   --warn-risky-stderr  redirects warning about potential unsolicited changes in suggestions to stderr;
                        option not recommended as the warning blocks dangerous 'git apply'
 EOU
-)
+}
 
 # parse options {{{2
 while :; do
