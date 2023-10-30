@@ -309,8 +309,8 @@ git_diff () (
     # shellcheck disable=SC2086
     git diff $color "$b_raw" "$chng_fmt" | \
         sed \
-            -e "s/$(sed_esc -p "a$b_raw")/$(sed_esc -s "$filename")/g" \
-            -e "s/$(sed_esc -p "b$chng_fmt")/$(sed_esc -s "$filename")/g"
+            -e "s/$(sed_esc -p "a$b_raw")/$(sed_esc -s a/"$filename")/g" \
+            -e "s/$(sed_esc -p "b$chng_fmt")/$(sed_esc -s b/"$filename")/g"
 )
 
 git_retrieve_file_from_sha () (
