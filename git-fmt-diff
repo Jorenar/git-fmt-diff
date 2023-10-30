@@ -393,13 +393,17 @@ process_file () (
         return
     fi
 
+    fmtcmd="$tempdir"/fmtcmd
+    rm_list__push "$fmtcmd"
+    echo "$formatter" > "$fmtcmd"
+
     # shellcheck disable=SC2086
-    eval "sh -c '$formatter' < '$b_raw' > '$b_fmt' $g_fmtprg_devnull"
+    eval "sh '$fmtcmd' < '$b_raw' > '$b_fmt' $g_fmtprg_devnull"
     rm_list__push "$b_fmt"
 
     git diff -s "$b_raw" "$b_fmt" && return
 
-    eval "sh -c '$formatter' < '$a_raw' > '$a_fmt' $g_fmtprg_devnull"
+    eval "sh '$fmtcmd' < '$a_raw' > '$a_fmt' $g_fmtprg_devnull"
     rm_list__push "$a_fmt"
 
     chng_fmt="$(git_changes_formatted \
