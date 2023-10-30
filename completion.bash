@@ -3,6 +3,7 @@ __git_fmt_diff_options="
     --staged
     --color
     --no-color
+    --fmtprg-stderr
     --config
     --warn-risky-stderr
 "

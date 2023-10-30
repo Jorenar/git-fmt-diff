@@ -13,6 +13,7 @@ gf_debug=0
 gf_no_term=
 gf_use_color=
 gf_warn_risky_stderr=
+g_fmtprg_devnull="2> /dev/null"
 
 g_rm_list="$(mktemp)"
 
@@ -48,12 +49,13 @@ cleanup () (
 )
 
 debug () (
-    [ "$2" != "--" ] && [ "$gf_debug" -eq 0 ] && return
-    >&2 printf "[debug] %s:%d # " "$(basename "$0")" "$1"
-    shift 1
-    >&2 echo "$@"
+    [ "$3" != "--" ] && [ "$gf_debug" -eq 0 ] && return
+    prg="$(basename "$0")"
+    func="$1" && shift 1
+    lineno="$1" && shift 1
+    >&2 printf "[debug] %s @ %s:%d # %s\n" "$prg" "$func" "$lineno" "$*"
 )
-alias debug='debug "$LINENO"'
+alias debug='debug "$FUNCNAME" "$LINENO"'
 
 pat_list_to_case () (
     sed 's/\s*,\s*/|/g'
@@ -393,12 +395,14 @@ process_file () (
         return
     fi
 
-    sh -c "$formatter" < "$b_raw" > "$b_fmt" 2> /dev/null
+    # shellcheck disable=SC2086
+    sh -c "$formatter" < "$b_raw" > "$b_fmt" $g_fmtprg_devnull
     rm_list__push "$b_fmt"
 
     git diff -s "$b_raw" "$b_fmt" && return
 
-    sh -c "$formatter" < "$a_raw" > "$a_fmt" 2> /dev/null
+    # shellcheck disable=SC2086
+    sh -c "$formatter" < "$a_raw" > "$a_fmt" $g_fmtprg_devnull
     rm_list__push "$a_fmt"
 
     chng_fmt="$(git_changes_formatted \
@@ -484,6 +488,7 @@ options:
   --staged             a synonym of --cached
   --color              always show colors
   --no-color           turn off colored diff
+  --fmtprg-stderr      show stderr from formatter programs
   --warn-risky-stderr  redirects warning about potential unsolicited changes in suggestions to stderr;
                        option not recommended as the warning blocks dangerous 'git apply'
 EOU
@@ -510,6 +515,9 @@ while :; do
             ;;
         --no-color)
             gf_use_color=0
+            ;;
+        --fmtprg-stderr)
+            g_fmtprg_devnull=""
             ;;
         --warn-risky-stderr)
             gf_warn_risky_stderr=1
