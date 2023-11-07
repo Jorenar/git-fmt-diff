@@ -369,7 +369,9 @@ process_file () (
         return
     fi
 
-    if [ ! -x "$(command -v "${formatter%% *}")" ]; then
+    if [ "${formatter%% *}" = "!" ]; then
+        formatter="${formatter#! *}"
+    elif [ ! -x "$(command -v "${formatter%% *}")" ]; then
         warn "format program '${formatter%% *}' not found"
         return
     fi
