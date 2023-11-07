@@ -61,24 +61,30 @@ Configuration follows the rest of Git configuration, example `~/.gitconfig`:
     ignore = site-packages/*, *.sh
 
 [fmt-diff "=python"]
-    ignore = true
+    ignore = true       # ignoring all Python files
 
 [fmt-diff "=go"]
     formatter = gofmt
+#               ^-- a program from $PATH
 
 [fmt-diff "tests/*"]
-    ignore = true
+    ignore = true      # don't check files under tests/ dir
 
 [fmt-diff "extern/*"]
-    ignore = true
+    ignore = true      # ignore all files under extern/ dir ...
 
 [fmt-diff "extern/lib/*.c"]
-    ignore = false
-    formatter = astyle --indent=tab
+    ignore = false    # ... but do NOT ignore C files from extern/lib/ dir
+
+[fmt-diff "tools/hex/*.c"]
+    formatter = ! ARTISTIC_STYLE_OPTIONS= astyle -A3 -K
+#               ^-- use sh expression
 
 [fmt-diff "extern/cpp_lib/*.h"]
     ignore = false
     filetype = cpp
+    formatter = ../ParentProj/.bin/astyle --indent=tab -A5
+#               ^-- relative path to executable
 
 # ... [alias], [include] etc. ...
 ```
@@ -97,3 +103,10 @@ Configuration follows the rest of Git configuration, example `~/.gitconfig`:
 
 Your formatter command needs to read from stdio and write to stdout.  
 That implies command needing to be filename agnostic!
+
+First word in formatter command needs to be an executable (either from `$PATH` or a path to it).  
+Before running it, script checks whether it's possible with `[ -x "$(command -v EXE)" ]`.  
+You can use _sh_ expression instead if you start the command with `!`.
+
+All paths are in relation to repository root.  
+Globs in sections are primitive - relative path won't be handled correctly.
