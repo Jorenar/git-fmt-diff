@@ -11,8 +11,8 @@ But you want to have future changes adhering to some sane style?
 Well, your formatter surely has some Git integration... it doesn't?  
 In that case, you are in the right place!  
 
-`git fmt-diff` shows how you could reformat just the lines touched in git commits;  
-similarly to tools like [git-clang-format](https://clang.llvm.org/docs/ClangFormat.html#git-integration), but formatter agnostic.
+`git fmt-diff` shows how you could reformat just the lines touched in commits  
+(similarly to tools like [git-clang-format](https://clang.llvm.org/docs/ClangFormat.html#git-integration), but you can use any formatter)
 
 ![screenshot](screenshot.png)
 
@@ -107,7 +107,7 @@ Your formatter command needs to read from stdio and write to stdout.
 That implies command needing to be filename agnostic!
 
 First word in formatter command needs to be an executable (either from `$PATH` or a path to it).  
-Before running it, script checks whether it's possible with `[ -x "$(command -v EXE)" ]`.  
+Before running the command, script checks whether it's possible using `test -x "$(command -v EXE)"`.  
 You can use _sh_ expression instead if you start the command with `!`.
 
 All paths are in relation to repository root.  
