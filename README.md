@@ -14,6 +14,8 @@ In that case, you are in the right place!
 `git fmt-diff` shows how you could reformat just the lines touched in git commits;  
 similarly to tools like [git-clang-format](https://clang.llvm.org/docs/ClangFormat.html#git-integration), but formatter agnostic.
 
+![screenshot](screenshot.png)
+
 ## Dependencies
 
 * POSIX compatible shell (e.g. [Dash](http://gondor.apana.org.au/~herbert/dash/), [Bash](https://www.gnu.org/software/bash/))
