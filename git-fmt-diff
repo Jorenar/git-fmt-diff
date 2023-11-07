@@ -49,15 +49,15 @@ cleanup () {
     done
 }
 
-# When debugging, make sure 'sh' is a link to Bash executable
 debug () (
-    [ "$3" != "--" ] && [ "$gf_debug" -eq 0 ] && return
-    prg="$(basename "$0")"
-    func="$1" && shift 1
-    lineno="$1" && shift 1
-    >&2 printf "[debug] %s @ %s:%d # %s\n" "$prg" "$func" "$lineno" "$*"
+    [ "$1" != "--" ] && [ "$gf_debug" -eq 0 ] && return
+    >&2 printf "[debug] %s" "$(basename "$0")"
+    if [ -n "$BASH_VERSION" ]; then
+        # shellcheck disable=SC3028,SC3054
+        >&2 printf ":%-3d  %30s" "${BASH_LINENO[0]}" "${FUNCNAME[1]}"'()'
+    fi
+    >&2 printf " | %s\n" "$*"
 )
-alias debug='debug "$FUNCNAME" "$LINENO"'
 
 pat_list_to_case () {
     sed 's/\s*,\s*/|/g'
@@ -355,7 +355,7 @@ process_file () (
     a_name="$4"
     b_name="${5:-$a_name}"
 
-    debug "--- PROCESSING: $b_name ---"
+    debug "# PROCESSING: $b_name #"
     debug "args = " "$@"
 
     case "$(git_conf_get "$b_name" ignore)" in
@@ -496,6 +496,15 @@ EOU
 }
 
 # parse options {{{2
+
+case "$@" in
+    --debug)
+        if [ -z "$BASH_VERSION" ] && [ -x "$(command -v bash)" ]; then
+            exec bash "$0" "$@"
+        fi
+        ;;
+esac
+
 while :; do
     case "$1" in
         -h)
