@@ -311,8 +311,8 @@ git_diff () (
     # shellcheck disable=SC2086
     git diff $color "$b_raw" "$chng_fmt" | \
         sed \
-            -e "s/$(sed_esc -p "a$b_raw")/$(sed_esc -s a/"$filename")/g" \
-            -e "s/$(sed_esc -p "b$chng_fmt")/$(sed_esc -s b/"$filename")/g"
+            -e "s/a\/*$(sed_esc -p "$b_raw")/$(sed_esc -s a/"$filename")/g" \
+            -e "s/b\/*$(sed_esc -p "$chng_fmt")/$(sed_esc -s b/"$filename")/g"
 )
 
 git_retrieve_file_from_sha () (
@@ -575,6 +575,8 @@ mkdir -p "$TMPDIR"
 g_rm_list="$(mktemp)"
 rm_list__push "$TMPDIR"
 rm_list__push "$g_rm_list"
+
+pwd -W > /dev/null 2>&1 && TMPDIR="$(cd "$TMPDIR" && pwd -W)"
 
 trap 'cleanup' EXIT
 # }}}2

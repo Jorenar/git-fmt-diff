@@ -18,7 +18,7 @@ In that case, you are in the right place!
 
 ## Dependencies
 
-* POSIX compatible shell (e.g. [Dash](http://gondor.apana.org.au/~herbert/dash/), [Bash](https://www.gnu.org/software/bash/))
+* POSIX compatible shell (e.g. [Dash](http://gondor.apana.org.au/~herbert/dash/), [Bash](https://www.gnu.org/software/bash/), KornShell, [Git Bash for Windows](https://gitforwindows.org/))
 * [Git](https://git-scm.com/)
 * [Vim](https://www.vim.org/) _(optional)_ - for config-less filetype detection
 * a formatter program of your choice
