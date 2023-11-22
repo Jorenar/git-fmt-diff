@@ -3,6 +3,8 @@
 
 [![CodeFactor](https://www.codefactor.io/repository/github/jorengarenar/git-fmt-diff/badge)](https://www.codefactor.io/repository/github/jorengarenar/git-fmt-diff)
 [![Codacy Badge](https://app.codacy.com/project/badge/Grade/668fa22e10dc4e029075604acc80cd08)](https://app.codacy.com/gh/Jorengarenar/git-fmt-diff/dashboard?utm_source=gh&utm_medium=referral&utm_content=&utm_campaign=Badge_grade)
+[![License](https://img.shields.io/github/license/Jorengarenar/git-fmt-diff)](https://github.com/Jorengarenar/git-fmt-diff/blob/master/LICENSE)
+[![GitHub release (latest SemVer including pre-releases)](https://img.shields.io/github/v/release/Jorengarenar/git-fmt-diff?include_prereleases&sort=semver)](https://github.com/Jorengarenar/git-fmt-diff/releases)
 [![AUR version](https://img.shields.io/aur/version/git-fmt-diff)](https://aur.archlinux.org/packages/git-fmt-diff)
 
 You inherited a huge codebase with thousands of commits?  
