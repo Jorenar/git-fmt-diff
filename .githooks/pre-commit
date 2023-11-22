@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+
+if ! git diff --quiet --cached "git-fmt-diff"; then
+    ver="$(git describe --always)"
+    sed -i 's/^gc_version=".*"/gc_version="'"$ver"'"/' git-fmt-diff
+    git add git-fmt-diff
+fi
