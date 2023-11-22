@@ -6,6 +6,7 @@
 # globals {{{
 
 gc_prog_name="fmt-diff"
+gc_version="0.1.5-3-geb406e4"
 
 g_cached_opt=
 
@@ -456,14 +457,14 @@ EOL
     wait
 
     if [ -s "$risky" ]; then
-        cat > "$risky".temp << EOW
+        cat > "$risky".temp << EOF
 $(sgr 33 '@ WARNING!')
 $(sgr 33 '@ Suggestions for the following files might smuggle unsolicited changes:')
 $(sort "$risky" | sed 's/^/-  /')
 $(sgr 33 "@ Review them thoroughly before applying.")
 
 
-EOW
+EOF
         mv "$risky".temp "$risky"
 
         if [ "$gf_warn_risky_stderr" -eq 1 ]; then
@@ -480,7 +481,7 @@ EOW
 # }}}1
 
 usage () {
-    cat << EOU
+    cat << EOF
 usage: git fmt-diff [<options>] [<commit>] [--] [<path>...]
    or: git fmt-diff [<options>] --cached [<commit>] [--] [<path>...]
    or: git fmt-diff [<options>] <commit>...<commit> [--] [<path>...]
@@ -496,7 +497,8 @@ options:
   --fmtprg-stderr      show stderr from formatter programs
   --warn-risky-stderr  redirects warning about potential unsolicited changes in suggestions to stderr;
                        option not recommended as the warning blocks dangerous 'git apply'
-EOU
+  --version            print version of git-$gc_prog_name script
+EOF
 }
 
 # parse options {{{2
@@ -535,6 +537,10 @@ while :; do
             ;;
         --warn-risky-stderr)
             gf_warn_risky_stderr=1
+            ;;
+        --version)
+            echo "$gc_version"
+            exit
             ;;
         --)
             shift

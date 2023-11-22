@@ -45,6 +45,7 @@ options:
   --fmtprg-stderr      show stderr from formatter programs
   --warn-risky-stderr  redirects warning about potential unsolicited changes in suggestions to stderr;
                        option not recommended as the warning blocks dangerous 'git apply'
+  --version            print version of git-fmt-diff script
 ```
 
 ## Installation
