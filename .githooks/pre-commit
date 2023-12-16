@@ -1,7 +1,10 @@
 #!/usr/bin/env sh
 
 if ! git diff --quiet --cached "git-fmt-diff"; then
-    ver="$(git describe --always | sed 's/^v//')"
-    sed -i 's/^gc_version=".*"/gc_version="'"$ver"'"/' git-fmt-diff
-    git add git-fmt-diff
+    if ! git diff --cached -U0 git-fmt-diff | grep -q 'gc_version'; then
+        ver="$(git describe --always | sed 's/^v//')"
+        echo "Updating script version string to $ver"
+        sed -i 's/^gc_version=".*"/gc_version="'"$ver"'"/' git-fmt-diff
+        git add git-fmt-diff
+    fi
 fi
