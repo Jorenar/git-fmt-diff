@@ -6,7 +6,7 @@
 # globals {{{
 
 gc_prog_name="fmt-diff"
-gc_version="1.0.0"
+gc_version="1.0.0-1-gb0bc928"
 
 g_cached_opt=
 
@@ -583,6 +583,8 @@ rm_list__push "$TMPDIR"
 rm_list__push "$g_rm_list"
 
 pwd -W > /dev/null 2>&1 && TMPDIR="$(cd "$TMPDIR" && pwd -W)"
+
+export LESS="R$LESS"
 
 trap 'cleanup' EXIT
 # }}}2
