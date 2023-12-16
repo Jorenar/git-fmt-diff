@@ -6,7 +6,7 @@
 # globals {{{
 
 gc_prog_name="fmt-diff"
-gc_version="1.0.0-1-gb0bc928"
+gc_version="1.0.1"
 
 g_cached_opt=
 
