@@ -6,7 +6,7 @@
 # globals {{{
 
 gc_prog_name="fmt-diff"
-gc_version="1.0.1"
+gc_version="1.0.1-1-gc914037+1"
 
 g_cached_opt=
 
@@ -60,6 +60,51 @@ debug () (
     # shellcheck disable=SC3028,SC3054
     >&2 printf '[debug] %s:%-3d  %30s | %s\n' \
         "$(basename "$0")" "${BASH_LINENO[0]}" "${FUNCNAME[1]}"'()'  "$*"
+)
+
+mk_tmp () (
+    if [ -z "$TMPDIR" ]; then
+        debug "TMPDIR not set"
+    fi
+
+    if [ ! -d "$TMPDIR" ]; then
+        debug "TMPDIR=$TMPDIR doesn't exist"
+        mkdir -p "$TMPDIR"
+        if [ ! -d "$TMPDIR" ]; then
+            debug "unable to create $TMPDIR"
+            return 1
+        fi
+    fi
+
+    tmp="$TMPDIR"
+    while [ -e "$tmp" ]; do
+        tmp="${TMPDIR:-/tmp}"/"$(sh -c 'echo "$$"')"
+    done
+
+    cmd="touch"
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            -u) cmd= ;;
+            -d) cmd="mkdir" ;;
+            --suffix) tmp="$tmp$2" && shift ;;
+            -p) debug "option '-p' not supported" && shift ;;
+            -?*) debug "option '$1' not supported" ;;
+            ?*) debug "custom TEMPLATE not supported" ;;
+        esac
+        shift
+    done
+
+    if [ -n "$cmd" ]; then
+        $cmd "$tmp"
+        if [ -e "$tmp" ]; then
+            debug "tmp = $tmp"
+        else
+            debug "unable to create tmp = $tmp"
+            return 1
+        fi
+    fi
+
+    echo "$tmp"
 )
 
 pat_list_to_case () {
@@ -379,7 +424,7 @@ process_file () (
         return
     fi
 
-    tempdir="$(mktemp -d)"
+    tempdir="$(mk_tmp -d)"
     rm_list__push "$tempdir"
 
     debug "$b_name => $tempdir"
@@ -424,7 +469,7 @@ process_file () (
 )
 
 processing () (
-    outdir="$(mktemp -d)"
+    outdir="$(mk_tmp -d --suffix '.out')"
     rm_list__push "$outdir"
     debug "OUTDIR: $outdir"
 
@@ -433,7 +478,7 @@ processing () (
     repo_root="$(git rev-parse --show-toplevel 2> /dev/null)"
     [ -n "$repo_root" ] && { cd "$repo_root" || exit 1; }
 
-    risky="$outdir"/0
+    risky="$outdir"/0.risky.list
     touch "$risky"
     rm_list__push "$risky"
 
@@ -578,10 +623,11 @@ repo_root="$(git rev-parse --show-toplevel 2> /dev/null)"
 # setup env {{{2
 TMPDIR="${TMPDIR:-/tmp}"/git-"$gc_prog_name"
 mkdir -p "$TMPDIR"
-g_rm_list="$(mktemp)"
+g_rm_list="$(mk_tmp --suffix '.rm.list')"
 rm_list__push "$TMPDIR"
 rm_list__push "$g_rm_list"
 
+# something for Windows... forgot what exactly...
 pwd -W > /dev/null 2>&1 && TMPDIR="$(cd "$TMPDIR" && pwd -W)"
 
 export LESS="R$LESS"
