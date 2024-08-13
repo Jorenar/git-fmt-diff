@@ -6,7 +6,7 @@
 # globals {{{
 
 gc_prog_name="fmt-diff"
-gc_version="1.0.1-1-gc914037+1"
+gc_version="1.0.1-4-master"
 
 g_cached_opt=
 
@@ -362,7 +362,7 @@ git_diff () (
 )
 
 git_retrieve_file_from_sha () (
-    sha="$1"
+    sha="${1%%.*}"
     file="$2"
 
     debug "sha = '$sha'"
