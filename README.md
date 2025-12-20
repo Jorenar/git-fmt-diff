@@ -54,7 +54,7 @@ options:
 
 ## Installation
 
-1. Download [git-fmt-diff](https://raw.githubusercontent.com/Jorenar/git-fmt-diff/master/git-fmt-diff) file
+1. Download [git-fmt-diff](https://codeberg.org/Jorenar/git-fmt-diff/raw/branch/master/git-fmt-diff) file
 2. Set it as executable: `$ chmod +x git-fmt-diff`
 3. Put it into any directory listed in `$PATH` variable
 
