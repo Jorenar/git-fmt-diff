@@ -6,7 +6,7 @@
 # globals {{{
 
 gc_prog_name="fmt-diff"
-gc_version="1.0.2"
+gc_version="1.0.2-7-master"
 
 g_cached_opt=
 
@@ -285,19 +285,11 @@ git_conf_get () (
 # processing files {{{1
 
 detect_filetype () (
-    file="$1"
-
     ft="$(git_conf_get "$1" filetype)"
+    [ -n "$ft" ] && echo "$ft" && return
 
-    if [ -z "$ft" ] && [ -x "$(command -v vim)" ]; then
-        vim --clean -es \
-            +'let c_syntax_for_h = 1' \
-            +"e $1" \
-            +'exec "!echo ".&ft' \
-            +"quit!"
-    fi
-
-    echo "$ft"
+    command -v vim >/dev/null && \
+        vim -u DEFAULTS -i NONE -es -c 'exec "!echo" &ft | q!' -- "$1"
 )
 
 git_changes_formatted () (
