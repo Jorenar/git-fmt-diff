@@ -6,7 +6,7 @@
 while read -r local_ref local_oid remote_ref remote_oid
 do
     [ -z "$(echo "$local_oid" | tr -d 0)" ] && continue
-    [ -z "$(echo "$remote_ref" | tr -d 0)" ] && continue
+    [ -z "$(echo "$remote_oid" | tr -d 0)" ] && continue
 
     out="$(git fmt-diff --color "$remote_oid" "$local_oid")"
     [ -z "$out" ] && continue
