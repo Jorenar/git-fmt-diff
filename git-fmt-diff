@@ -1,12 +1,12 @@
 #!/usr/bin/env sh
 
 # SPDX-License-Identifier: MIT
-# Copyright 2023-2025 Jorenar
+# Copyright 2023-2026 Jorenar
 
 # globals {{{
 
 gc_prog_name="fmt-diff"
-gc_version="1.0.3-0-master"
+gc_version="1.0.3-4-master"
 
 g_cached_opt=
 
